@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brother Cond. Madinaty — Spare Parts System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+  :root{
+    --bg: #EEF1F4; --surface: #FFFFFF; --surface-2: #F6F8FA; --ink: #182430; --ink-soft: #5B6B7A;
+    --primary: #16324F; --primary-2: #1E4266; --accent: #E8A33D; --accent-ink: #7A4A05;
+    --success: #2E7D5B; --success-bg: #E6F3ED; --danger: #C1443C; --danger-bg: #FBEAE8;
+    --border: #DCE2E8; --radius: 10px; --shadow: 0 1px 2px rgba(22,33,45,0.06), 0 4px 14px rgba(22,33,45,0.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'IBM Plex Sans','Cairo',sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased; }
+  body[dir="rtl"]{ font-family:'Cairo','IBM Plex Sans',sans-serif; }
+  h1,h2,h3,.brand,.tab-label,.stat-label,button{ font-family:'Cairo','IBM Plex Sans',sans-serif; }
+  .tabular{ font-variant-numeric: tabular-nums; }
+  #app{ display:none; } #app.ready{ display:flex; min-height:100vh; }
+  #login-screen{ min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(160deg, var(--primary) 0%, var(--primary-2) 55%, #123049 100%); position:relative; overflow:hidden; }
+  #login-screen::before{ content:""; position:absolute; inset:0; background-image: repeating-linear-gradient(135deg, rgba(232,163,61,0.08) 0 14px, transparent 14px 34px); }
+  .login-card{ position:relative; z-index:1; width:380px; max-width:92vw; background:var(--surface); border-radius:16px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); padding:34px 30px 28px; text-align:center; }
+  .login-stripe{ height:6px; border-radius:6px; margin:-34px -30px 22px; background:repeating-linear-gradient(135deg, var(--accent) 0 12px, var(--primary) 12px 24px); }
+  .login-card h1{ font-size:20px; margin:0 0 2px; color:var(--primary); } .login-card .sub{ color:var(--ink-soft); font-size:13px; margin-bottom:22px; }
+  .field{ text-align:left; margin-bottom:14px; } body[dir="rtl"] .field{ text-align:right; }
+  .field label{ display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
+  .field input, .field select, .field textarea{ width:100%; padding:10px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:14px; font-family:inherit; background:var(--surface-2); color:var(--ink); }
+  .field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--accent); background:#fff; }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 16px; border-radius:8px; border:none; cursor:pointer; font-weight:600; font-size:14px; font-family:inherit; transition:transform .05s ease, filter .15s ease; }
+  .btn:active{ transform:translateY(1px); } .btn-primary{ background:var(--primary); color:#fff; } .btn-primary:hover{ filter:brightness(1.12); }
+  .btn-accent{ background:var(--accent); color:#3A2600; } .btn-accent:hover{ filter:brightness(1.06); }
+  .btn-outline{ background:transparent; color:var(--primary); border:1.5px solid var(--border); } .btn-outline:hover{ border-color:var(--primary); }
+  .btn-danger{ background:var(--danger-bg); color:var(--danger); } .btn-danger:hover{ filter:brightness(0.97); }
+  .btn-block{ width:100%; } .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:6px; }
+  .login-error{ color:var(--danger); font-size:13px; margin-top:6px; min-height:16px; }
+  .login-hint{ margin-top:16px; font-size:11.5px; color:var(--ink-soft); background:var(--surface-2); border-radius:8px; padding:8px 10px; }
+  #sidebar{ width:220px; background:var(--primary); color:#fff; display:flex; flex-direction:column; padding:18px 12px; flex-shrink:0; }
+  .brand{ display:flex; align-items:center; gap:10px; padding:6px 8px 18px; border-bottom:1px solid rgba(255,255,255,0.12); margin-bottom:14px; }
+  .brand-badge{ width:36px; height:36px; border-radius:9px; background-color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:800; color:#3A2600; font-size:15px; }
+  .brand-text{ line-height:1.15; } .brand-text .name{ font-weight:700; font-size:14px; } .brand-text .branch{ font-size:11px; opacity:0.75; }
+  .nav-item{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; color:#D9E2EA; cursor:pointer; font-size:13.5px; font-weight:600; margin-bottom:3px; user-select:none; }
+  .nav-item .ic{ width:18px; text-align:center; flex-shrink:0; } .nav-item:hover{ background:rgba(255,255,255,0.07); }
+  .nav-item.active{ background:var(--accent); color:#3A2600; }
+  .sidebar-foot{ margin-top:auto; padding-top:12px; border-top:1px solid rgba(255,255,255,0.12); }
+  .who{ font-size:12px; color:#cfd9e2; margin-bottom:8px; padding:0 4px; } .who b{ color:#fff; display:block; font-size:13px; }
+  #main{ flex:1; padding:22px 26px 40px; overflow-x:hidden; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; gap:12px; flex-wrap:wrap; }
+  .page-title{ font-size:21px; font-weight:800; color:var(--primary); margin:0; } .page-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .lang-toggle{ display:flex; border:1.5px solid var(--border); border-radius:8px; overflow:hidden; }
+  .lang-toggle button{ border:none; background:var(--surface); padding:7px 12px; font-size:12.5px; font-weight:700; cursor:pointer; color:var(--ink-soft); }
+  .lang-toggle button.active{ background:var(--primary); color:#fff; }
+  .card{ background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 20px; margin-bottom:18px; }
+  .card h3{ margin:0 0 14px; font-size:15px; color:var(--primary); }
+  .grid{ display:grid; gap:16px; } .grid-4{ grid-template-columns:repeat(4,1fr); } .grid-3{ grid-template-columns:repeat(3,1fr); } .grid-2{ grid-template-columns:repeat(2,1fr); }
+  @media (max-width:1000px){ .grid-4{grid-template-columns:repeat(2,1fr);} .grid-3{grid-template-columns:repeat(2,1fr);} }
+  .stat-card{ background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 18px; position:relative; overflow:hidden; }
+  .stat-card::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--accent); } body[dir="rtl"] .stat-card::before{ left:auto; right:0; }
+  .stat-card.danger::before{ background:var(--danger); } .stat-card.success::before{ background:var(--success); }
+  .stat-label{ font-size:11.5px; text-transform:uppercase; letter-spacing:0.4px; color:var(--ink-soft); font-weight:700; margin-bottom:6px; }
+  .stat-value{ font-size:23px; font-weight:800; color:var(--primary); }
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th{ text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:0.3px; color:var(--ink-soft); padding:9px 10px; border-bottom:2px solid var(--border); } body[dir="rtl"] th{ text-align:right; }
+  td{ padding:10px; border-bottom:1px solid var(--border); vertical-align:middle; } tr:hover td{ background:var(--surface-2); }
+  .badge{ display:inline-block; padding:3px 9px; border-radius:99px; font-size:11px; font-weight:700; } .badge-low{ background:var(--danger-bg); color:var(--danger); }
+  .row-actions{ display:flex; gap:6px; } .search-row{ display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .search-row input, .search-row select{ padding:9px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13.5px; font-family:inherit; background:var(--surface-2); }
+  .search-row input{ flex:1; min-width:180px; }
+  .empty-state{ text-align:center; padding:36px 10px; color:var(--ink-soft); } .empty-state .big{ font-size:28px; margin-bottom:6px; }
+  .overlay{ position:fixed; inset:0; background:rgba(15,23,32,0.5); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; } .overlay.show{ display:flex; }
+  .modal{ background:var(--surface); border-radius:14px; width:480px; max-width:100%; max-height:88vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.35); }
+  .modal-head{ padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; } .modal-head h3{ margin:0; font-size:16px; color:var(--primary); }
+  .modal-body{ padding:18px 20px; } .modal-foot{ padding:14px 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+  .close-x{ cursor:pointer; border:none; background:var(--surface-2); width:28px; height:28px; border-radius:7px; font-size:15px; color:var(--ink-soft); }
+  .pos-wrap{ display:grid; grid-template-columns:1.4fr 1fr; gap:18px; align-items:start; } @media (max-width:1000px){ .pos-wrap{ grid-template-columns:1fr; } }
+  .part-pick{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1.5px solid var(--border); border-radius:9px; margin-bottom:8px; cursor:pointer; background:var(--surface-2); } .part-pick:hover{ border-color:var(--accent); }
+  .part-pick .pn{ font-weight:700; font-size:13.5px; } .part-pick .pm{ font-size:11.5px; color:var(--ink-soft); }
+  .cart-line{ display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px dashed var(--border); font-size:13px; } .cart-line .cn{ flex:1; }
+  .cart-line input{ width:52px; padding:5px; border-radius:6px; border:1.5px solid var(--border); text-align:center; }
+  .cart-total-row{ display:flex; justify-content:space-between; padding:6px 0; font-size:13.5px; }
+  .cart-total-row.grand{ font-size:17px; font-weight:800; color:var(--primary); border-top:2px solid var(--border); margin-top:8px; padding-top:10px; }
+  .toast{ position:fixed; bottom:22px; right:22px; background:var(--primary); color:#fff; padding:12px 18px; border-radius:9px; box-shadow:var(--shadow); font-size:13.5px; font-weight:600; z-index:100; opacity:0; transform:translateY(10px); transition:all .25s ease; }
+  body[dir="rtl"] .toast{ right:auto; left:22px; } .toast.show{ opacity:1; transform:translateY(0); }
+  #receipt-print{ display:none; }
+  @media print{ body *{ visibility:hidden; } #receipt-print, #receipt-print *{ visibility:visible; } #receipt-print{ display:block; position:absolute; top:0; left:0; width:100%; padding:14px; } }
+  .rc-head{ text-align:center; margin-bottom:10px; } .rc-head .shop{ font-weight:800; font-size:16px; } .rc-head .meta{ font-size:11.5px; color:#333; }
+  .rc-line{ display:flex; justify-content:space-between; font-size:12px; padding:3px 0; } .rc-tot{ border-top:1px dashed #333; margin-top:6px; padding-top:6px; font-weight:800; } .rc-sep{ border-top:1px dashed #333; margin:8px 0; }
+  ::placeholder{ color:#9AA7B2; } .muted{ color:var(--ink-soft); font-size:12.5px; } .req{ color:var(--danger); }
+  #boot-error{ display:none; position:fixed; inset:0; background:#fff; z-index:999; padding:40px; font-family:sans-serif; color:#C1443C; }
+</style>
+</head>
+<body>
+
+<div id="boot-error">
+  <h2>Configuration needed</h2>
+  <p>Open <code>config.js</code> and set your <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> from your Supabase project (Project Settings → API), then reload this page.</p>
+</div>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-stripe"></div>
+    <h1 id="lg-title">Spare Parts System</h1>
+    <div class="sub" id="lg-sub">Brother Cond. — Madinaty Branch</div>
+    <div class="field"><label id="lg-user-label">Email</label><input id="lg-username" placeholder="name@example.com" autocomplete="username"></div>
+    <div class="field"><label id="lg-pass-label">Password</label><input id="lg-password" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    <button class="btn btn-primary btn-block" id="lg-btn" onclick="Auth.login()">Log in</button>
+    <div class="login-error" id="lg-error"></div>
+    <div class="login-hint" id="lg-hint">Ask your admin to create your account in the Supabase dashboard (Authentication → Users), then log in here with that email and password.</div>
+    <div style="margin-top:14px;">
+      <div class="lang-toggle" style="display:inline-flex;">
+        <button id="lg-lang-en" onclick="I18N.set('en')">EN</button>
+        <button id="lg-lang-ar" onclick="I18N.set('ar')">AR</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="sidebar">
+    <div class="brand">
+      <div class="brand-badge">BC</div>
+      <div class="brand-text"><div class="name" id="sb-name">Brother Cond.</div><div class="branch" id="sb-branch">Madinaty Branch</div></div>
+    </div>
+    <div id="nav-list"></div>
+    <div class="sidebar-foot">
+      <div class="who"><b id="who-name">—</b><span id="who-role">—</span></div>
+      <div class="lang-toggle" style="margin-bottom:8px;">
+        <button id="app-lang-en" onclick="I18N.set('en')">EN</button>
+        <button id="app-lang-ar" onclick="I18N.set('ar')">AR</button>
+      </div>
+      <button class="btn btn-outline btn-block btn-sm" style="border-color:rgba(255,255,255,0.3); color:#fff;" onclick="Auth.logout()" id="logout-btn">Log out</button>
+    </div>
+  </div>
+  <div id="main"></div>
+</div>
+
+<div class="overlay" id="modal-overlay"><div class="modal" id="modal-box"></div></div>
+<div class="toast" id="toast"></div>
+<div id="receipt-print"></div>
+
+<script>
+/* ============================================================
+   SUPABASE CLIENT
+============================================================ */
+let sb = null;
+try{
+  if(!SUPABASE_URL || SUPABASE_URL.includes('YOUR-PROJECT-REF')){ throw new Error('not configured'); }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}catch(e){ document.getElementById('boot-error').style.display='block'; }
+
+/* ============================================================
+   I18N
+============================================================ */
+const DICT = {
+en:{
+  appName:"Spare Parts System", branch:"Madinaty Branch",
+  dashboard:"Dashboard", inventory:"Inventory", suppliers:"Suppliers", purchases:"Purchases",
+  pos:"Sales (POS)", customers:"Customers", finance:"Finance", staff:"Staff",
+  login:"Log in", username:"Email", password:"Password", logout:"Log out",
+  add:"Add", edit:"Edit", delete:"Delete", save:"Save", cancel:"Cancel", close:"Close", search:"Search...",
+  actions:"Actions", name:"Name", phone:"Phone", address:"Address", notes:"Notes",
+  partName:"Part name", sku:"SKU / Code", category:"Category", unit:"Unit",
+  costPrice:"Cost price", sellPrice:"Selling price", stock:"Stock qty", reorderLevel:"Reorder at",
+  supplier:"Supplier", noSupplier:"— none —",
+  addPart:"Add part", editPart:"Edit part", partList:"Parts in stock",
+  addSupplier:"Add supplier", addCustomer:"Add customer",
+  recordPurchase:"Record purchase", purchaseList:"Purchase history", selectSupplier:"Select supplier",
+  addItem:"Add item", qty:"Qty", total:"Total", grandTotal:"Grand total",
+  walkIn:"Walk-in customer", selectCustomer:"Customer", searchPart:"Search part by name or SKU",
+  cart:"Cart", discount:"Discount", paid:"Amount paid", change:"Change due",
+  checkout:"Checkout & print receipt", receiptNo:"Receipt No", date:"Date",
+  subtotal:"Subtotal", thankYou:"Thank you for your business!", printedBy:"Served by",
+  revenue:"Total revenue", cogs:"Cost of goods sold", grossProfit:"Gross profit",
+  otherExpenses:"Other expenses", netProfit:"Net profit", inventoryValue:"Inventory value",
+  lowStockAlert:"Low stock alert", addExpense:"Add expense", expenseCategory:"Category", amount:"Amount",
+  expenseList:"Expense log", staffList:"Staff accounts", role:"Role",
+  admin:"Admin", staffRole:"Staff", fullName:"Full name",
+  noData:"No records yet.", requiredFields:"Please fill all required fields.",
+  invalidLogin:"Invalid email or password.", insufficientStock:"Not enough stock available.",
+  confirmDelete:"Are you sure you want to delete this?", saved:"Saved successfully.",
+  deleted:"Deleted.", saleDone:"Sale completed.", purchaseDone:"Purchase recorded.",
+  today:"Today's sales", todayCount:"Today's transactions", totalParts:"Parts tracked",
+  lowStockCount:"Low stock items", recentSales:"Recent sales",
+  cartEmptyMsg:"Add parts to the cart to begin.", changeInvalid:"Amount paid is less than the total.",
+  accessDenied:"You don't have access to this section.", shopAddress:"New Cairo, Madinaty, Egypt", currency:"EGP",
+  categoryPh:"e.g. Compressor, Filter, Coil...", skuPh:"e.g. AC-COMP-014", loading:"Loading...",
+  addStaffHint:"To add a new staff member, create their account in the Supabase dashboard (Authentication → Users) with an email and password. They'll appear here automatically — set their role below.",
+},
+ar:{
+  appName:"نظام قطع الغيار", branch:"فرع مدينتي",
+  dashboard:"الرئيسية", inventory:"المخزون", suppliers:"الموردون", purchases:"المشتريات",
+  pos:"البيع (نقطة البيع)", customers:"العملاء", finance:"الحسابات", staff:"الموظفون",
+  login:"تسجيل الدخول", username:"البريد الإلكتروني", password:"كلمة المرور", logout:"تسجيل الخروج",
+  add:"إضافة", edit:"تعديل", delete:"حذف", save:"حفظ", cancel:"إلغاء", close:"إغلاق", search:"بحث...",
+  actions:"إجراءات", name:"الاسم", phone:"الهاتف", address:"العنوان", notes:"ملاحظات",
+  partName:"اسم القطعة", sku:"الكود", category:"الفئة", unit:"الوحدة",
+  costPrice:"سعر الشراء", sellPrice:"سعر البيع", stock:"الكمية بالمخزون", reorderLevel:"حد إعادة الطلب",
+  supplier:"المورد", noSupplier:"— بدون —",
+  addPart:"إضافة قطعة", editPart:"تعديل القطعة", partList:"القطع بالمخزون",
+  addSupplier:"إضافة مورد", addCustomer:"إضافة عميل",
+  recordPurchase:"تسجيل عملية شراء", purchaseList:"سجل المشتريات", selectSupplier:"اختر المورد",
+  addItem:"إضافة صنف", qty:"الكمية", total:"الإجمالي", grandTotal:"الإجمالي الكلي",
+  walkIn:"عميل نقدي", selectCustomer:"العميل", searchPart:"ابحث عن قطعة بالاسم أو الكود",
+  cart:"السلة", discount:"الخصم", paid:"المبلغ المدفوع", change:"الباقي",
+  checkout:"إتمام البيع وطباعة الإيصال", receiptNo:"رقم الإيصال", date:"التاريخ",
+  subtotal:"الإجمالي الفرعي", thankYou:"شكراً لتعاملكم معنا!", printedBy:"تم البيع بواسطة",
+  revenue:"إجمالي المبيعات", cogs:"تكلفة البضاعة المباعة", grossProfit:"إجمالي الربح",
+  otherExpenses:"مصروفات أخرى", netProfit:"صافي الربح", inventoryValue:"قيمة المخزون",
+  lowStockAlert:"تنبيه نقص المخزون", addExpense:"إضافة مصروف", expenseCategory:"البند", amount:"المبلغ",
+  expenseList:"سجل المصروفات", staffList:"حسابات الموظفين", role:"الصلاحية",
+  admin:"مدير", staffRole:"موظف", fullName:"الاسم الكامل",
+  noData:"لا توجد بيانات بعد.", requiredFields:"يرجى ملء جميع الحقول المطلوبة.",
+  invalidLogin:"البريد الإلكتروني أو كلمة المرور غير صحيحة.", insufficientStock:"الكمية المتوفرة غير كافية.",
+  confirmDelete:"هل أنت متأكد من الحذف؟", saved:"تم الحفظ بنجاح.",
+  deleted:"تم الحذف.", saleDone:"تمت عملية البيع.", purchaseDone:"تم تسجيل الشراء.",
+  today:"مبيعات اليوم", todayCount:"عدد عمليات اليوم", totalParts:"عدد القطع",
+  lowStockCount:"أصناف منخفضة المخزون", recentSales:"آخر المبيعات",
+  cartEmptyMsg:"أضف قطعاً إلى السلة للبدء.", changeInvalid:"المبلغ المدفوع أقل من الإجمالي.",
+  accessDenied:"ليس لديك صلاحية الوصول لهذا القسم.", shopAddress:"مدينتي، القاهرة الجديدة، مصر", currency:"جنيه",
+  categoryPh:"مثال: كمبروسر، فلتر، مواسير...", skuPh:"مثال: AC-COMP-014", loading:"جارِ التحميل...",
+  addStaffHint:"لإضافة موظف جديد، أنشئ حسابه من لوحة تحكم Supabase (Authentication → Users) ببريد إلكتروني وكلمة مرور. سيظهر هنا تلقائياً — حدد صلاحيته أدناه.",
+}
+};
+const I18N = {
+  lang: 'ar',
+  t(k){ return (DICT[this.lang] && DICT[this.lang][k]) || (DICT.en[k]) || k; },
+  set(l){
+    this.lang = l;
+    document.body.setAttribute('dir', l==='ar' ? 'rtl':'ltr');
+    document.documentElement.setAttribute('lang', l);
+    this.refreshStatic();
+    if(document.getElementById('app').classList.contains('ready')){ Router.render(); }
+  },
+  refreshStatic(){
+    const t = this.t.bind(this);
+    document.getElementById('lg-title').textContent = t('appName');
+    document.getElementById('lg-sub').textContent = "Brother Cond. — " + t('branch');
+    document.getElementById('lg-user-label').textContent = t('username');
+    document.getElementById('lg-pass-label').textContent = t('password');
+    document.getElementById('lg-btn').textContent = t('login');
+    document.getElementById('lg-hint').textContent = t('addStaffHint');
+    document.getElementById('sb-branch').textContent = t('branch');
+    document.getElementById('logout-btn').textContent = t('logout');
+    ['lg-lang-en','app-lang-en'].forEach(id=>{ const e=document.getElementById(id); if(e){e.classList.toggle('active', this.lang==='en');} });
+    ['lg-lang-ar','app-lang-ar'].forEach(id=>{ const e=document.getElementById(id); if(e){e.classList.toggle('active', this.lang==='ar');} });
+  }
+};
+
+/* ============================================================
+   HELPERS
+============================================================ */
+function money(n){ n = Number(n)||0; return n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function showToast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(window.__tt); window.__tt=setTimeout(()=>el.classList.remove('show'),2200); }
+
+/* ============================================================
+   DATA CACHE (fetched from Supabase, refreshed after each change)
+============================================================ */
+const Data = {
+  parts:[], suppliers:[], customers:[], purchases:[], sales:[], expenses:[], profiles:[],
+  async refreshAll(){
+    const [parts, suppliers, customers, purchases, sales, expenses, profiles] = await Promise.all([
+      sb.from('parts').select('*').order('name'),
+      sb.from('suppliers').select('*').order('name'),
+      sb.from('customers').select('*').order('name'),
+      sb.from('purchases').select('*, purchase_items(*)').order('created_at', {ascending:false}),
+      sb.from('sales').select('*, sale_items(*)').order('created_at', {ascending:false}),
+      sb.from('expenses').select('*').order('date', {ascending:false}),
+      sb.from('profiles').select('*'),
+    ]);
+    this.parts = parts.data||[]; this.suppliers = suppliers.data||[]; this.customers = customers.data||[];
+    this.purchases = purchases.data||[]; this.sales = sales.data||[]; this.expenses = expenses.data||[]; this.profiles = profiles.data||[];
+  }
+};
+
+/* ============================================================
+   AUTH
+============================================================ */
+const Auth = {
+  current:null,
+  async login(){
+    const email = document.getElementById('lg-username').value.trim();
+    const password = document.getElementById('lg-password').value;
+    const err = document.getElementById('lg-error');
+    err.textContent = '';
+    const {data, error} = await sb.auth.signInWithPassword({email, password});
+    if(error || !data.user){ err.textContent = I18N.t('invalidLogin'); return; }
+    await this.loadProfile(data.user);
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').classList.add('ready');
+    await App.bootAfterLogin();
+  },
+  async loadProfile(user){
+    const {data} = await sb.from('profiles').select('*').eq('id', user.id).single();
+    this.current = data || {id:user.id, email:user.email, full_name:user.email, role:'staff'};
+    document.getElementById('who-name').textContent = this.current.full_name || this.current.email;
+    document.getElementById('who-role').textContent = this.current.role==='admin' ? I18N.t('admin') : I18N.t('staffRole');
+  },
+  async logout(){
+    await sb.auth.signOut();
+    this.current = null;
+    document.getElementById('app').classList.remove('ready');
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('lg-username').value=''; document.getElementById('lg-password').value='';
+  },
+  isAdmin(){ return this.current && this.current.role==='admin'; },
+  async restoreSession(){
+    const {data:{session}} = await sb.auth.getSession();
+    if(session && session.user){
+      await this.loadProfile(session.user);
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app').classList.add('ready');
+      await App.bootAfterLogin();
+    }
+  }
+};
+
+/* ============================================================
+   MODAL
+============================================================ */
+const Modal = {
+  open(title, bodyHtml, footHtml){
+    document.getElementById('modal-box').innerHTML = `<div class="modal-head"><h3>${title}</h3><button class="close-x" onclick="Modal.close()">✕</button></div><div class="modal-body">${bodyHtml}</div><div class="modal-foot">${footHtml}</div>`;
+    document.getElementById('modal-overlay').classList.add('show');
+  },
+  close(){ document.getElementById('modal-overlay').classList.remove('show'); }
+};
+
+/* ============================================================
+   NAVIGATION
+============================================================ */
+const NAV_ITEMS = [
+  {key:'dashboard', icon:'◆', adminOnly:false}, {key:'inventory', icon:'▣', adminOnly:false},
+  {key:'suppliers', icon:'⇄', adminOnly:false}, {key:'purchases', icon:'⇩', adminOnly:false},
+  {key:'pos', icon:'🛒', adminOnly:false}, {key:'customers', icon:'☺', adminOnly:false},
+  {key:'finance', icon:'▤', adminOnly:true}, {key:'staff', icon:'⚙', adminOnly:true},
+];
+const Router = {
+  active:'dashboard',
+  go(key){ this.active=key; this.render(); },
+  renderNav(){
+    const t=I18N.t.bind(I18N);
+    document.getElementById('nav-list').innerHTML = NAV_ITEMS.filter(n=> !n.adminOnly || Auth.isAdmin()).map(n=>
+      `<div class="nav-item ${this.active===n.key?'active':''}" onclick="Router.go('${n.key}')"><span class="ic">${n.icon}</span><span>${t(n.key)}</span></div>`).join('');
+  },
+  render(){
+    this.renderNav();
+    document.getElementById('who-role').textContent = Auth.isAdmin() ? I18N.t('admin') : I18N.t('staffRole');
+    const item = NAV_ITEMS.find(n=>n.key===this.active);
+    const page = (!item.adminOnly || Auth.isAdmin()) ? this.active : 'dashboard';
+    this.active = page;
+    const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
+    document.getElementById('main').innerHTML = renderers[page]();
+  }
+};
+
+/* ============================================================
+   PAGES
+============================================================ */
+const Pages = {};
+Pages.topbar = (titleKey)=>{ const t=I18N.t.bind(I18N); return `<div class="topbar"><div><h1 class="page-title">${t(titleKey)}</h1></div></div>`; };
+
+/* ---- DASHBOARD ---- */
+Pages.dashboard = ()=>{
+  const t=I18N.t.bind(I18N);
+  const parts=Data.parts, sales=Data.sales, today=todayStr();
+  const todaySales = sales.filter(s=>s.created_at.slice(0,10)===today);
+  const todayTotal = todaySales.reduce((a,s)=>a+Number(s.total),0);
+  const lowStock = parts.filter(p=>Number(p.stock)<=Number(p.reorder_level));
+  const recentSales = sales.slice(0,6);
+  return `${Pages.topbar('dashboard')}
+  <div class="grid grid-4">
+    <div class="stat-card success"><div class="stat-label">${t('today')}</div><div class="stat-value tabular">${money(todayTotal)} ${t('currency')}</div></div>
+    <div class="stat-card"><div class="stat-label">${t('todayCount')}</div><div class="stat-value tabular">${todaySales.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${t('totalParts')}</div><div class="stat-value tabular">${parts.length}</div></div>
+    <div class="stat-card ${lowStock.length?'danger':''}"><div class="stat-label">${t('lowStockCount')}</div><div class="stat-value tabular">${lowStock.length}</div></div>
+  </div>
+  <div class="grid grid-2">
+    <div class="card"><h3>${t('lowStockAlert')}</h3>${lowStock.length? `<table><thead><tr><th>${t('partName')}</th><th>${t('stock')}</th><th>${t('reorderLevel')}</th></tr></thead><tbody>${lowStock.map(p=>`<tr><td>${p.name}</td><td>${p.stock}</td><td>${p.reorder_level}</td></tr>`).join('')}</tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
+    <div class="card"><h3>${t('recentSales')}</h3>${recentSales.length? `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('total')}</th></tr></thead><tbody>${recentSales.map(s=>`<tr><td>#${s.receipt_no}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td class="tabular">${money(s.total)}</td></tr>`).join('')}</tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
+  </div>`;
+};
+
+/* ---- INVENTORY ---- */
+Pages.inventory = ()=>{
+  const t=I18N.t.bind(I18N);
+  return `${Pages.topbar('inventory')}
+  <div class="card">
+    <div class="search-row"><input id="inv-search" placeholder="${t('search')}" oninput="Pages.filterInventory()"><button class="btn btn-accent" onclick="Pages.openPartModal()">+ ${t('addPart')}</button></div>
+    <div id="inv-table-wrap">${Pages.renderPartsTable(Data.parts)}</div>
+  </div>`;
+};
+Pages.renderPartsTable = (parts)=>{
+  const t=I18N.t.bind(I18N);
+  if(!parts.length) return `<div class="empty-state">${t('noData')}</div>`;
+  const supName = id=>{ const s=Data.suppliers.find(x=>x.id===id); return s? s.name : t('noSupplier'); };
+  return `<table><thead><tr><th>${t('sku')}</th><th>${t('partName')}</th><th>${t('category')}</th><th>${t('supplier')}</th><th>${t('costPrice')}</th><th>${t('sellPrice')}</th><th>${t('stock')}</th><th>${t('actions')}</th></tr></thead><tbody>
+  ${parts.map(p=>`<tr><td>${p.sku||'—'}</td><td>${p.name}</td><td>${p.category||'—'}</td><td>${supName(p.supplier_id)}</td>
+    <td class="tabular">${money(p.cost_price)}</td><td class="tabular">${money(p.sell_price)}</td>
+    <td>${p.stock} ${p.unit||''} ${Number(p.stock)<=Number(p.reorder_level)?`<span class="badge badge-low">${t('lowStockAlert')}</span>`:''}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openPartModal('${p.id}')">${t('edit')}</button><button class="btn btn-danger btn-sm" onclick="Pages.deletePart('${p.id}')">${t('delete')}</button></td></tr>`).join('')}
+  </tbody></table>`;
+};
+Pages.filterInventory = ()=>{
+  const q=document.getElementById('inv-search').value.trim().toLowerCase();
+  const parts = Data.parts.filter(p=>!q||p.name.toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q));
+  document.getElementById('inv-table-wrap').innerHTML = Pages.renderPartsTable(parts);
+};
+Pages.openPartModal = (id)=>{
+  const t=I18N.t.bind(I18N);
+  const p = id? Data.parts.find(x=>x.id===id) : null;
+  const supOptions = `<option value="">${t('noSupplier')}</option>` + Data.suppliers.map(s=>`<option value="${s.id}" ${p&&p.supplier_id===s.id?'selected':''}>${s.name}</option>`).join('');
+  Modal.open(p? t('editPart') : t('addPart'), `
+    <div class="field"><label>${t('partName')} <span class="req">*</span></label><input id="pf-name" value="${p?p.name:''}"></div>
+    <div class="grid grid-2"><div class="field"><label>${t('sku')}</label><input id="pf-sku" placeholder="${t('skuPh')}" value="${p?p.sku||'':''}"></div>
+    <div class="field"><label>${t('category')}</label><input id="pf-cat" placeholder="${t('categoryPh')}" value="${p?p.category||'':''}"></div></div>
+    <div class="field"><label>${t('supplier')}</label><select id="pf-sup">${supOptions}</select></div>
+    <div class="grid grid-3"><div class="field"><label>${t('costPrice')}</label><input id="pf-cost" type="number" step="0.01" value="${p?p.cost_price:''}"></div>
+    <div class="field"><label>${t('sellPrice')}</label><input id="pf-sell" type="number" step="0.01" value="${p?p.sell_price:''}"></div>
+    <div class="field"><label>${t('unit')}</label><input id="pf-unit" placeholder="pcs" value="${p?p.unit||'':''}"></div></div>
+    <div class="grid grid-2"><div class="field"><label>${t('stock')}</label><input id="pf-stock" type="number" value="${p?p.stock:0}"></div>
+    <div class="field"><label>${t('reorderLevel')}</label><input id="pf-reorder" type="number" value="${p?p.reorder_level:2}"></div></div>
+  `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.savePart('${p?p.id:''}')">${t('save')}</button>`);
+};
+Pages.savePart = async(id)=>{
+  const t=I18N.t.bind(I18N);
+  const name=document.getElementById('pf-name').value.trim();
+  const cost=parseFloat(document.getElementById('pf-cost').value), sell=parseFloat(document.getElementById('pf-sell').value), stock=parseInt(document.getElementById('pf-stock').value);
+  if(!name||isNaN(cost)||isNaN(sell)||isNaN(stock)){ showToast(t('requiredFields')); return; }
+  const row = { name, sku:document.getElementById('pf-sku').value.trim(), category:document.getElementById('pf-cat').value.trim(),
+    supplier_id: document.getElementById('pf-sup').value||null, cost_price:cost, sell_price:sell,
+    unit:document.getElementById('pf-unit').value.trim()||'pcs', stock, reorder_level:parseInt(document.getElementById('pf-reorder').value)||0 };
+  const {error} = id ? await sb.from('parts').update(row).eq('id', id) : await sb.from('parts').insert(row);
+  if(error){ showToast(error.message); return; }
+  Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
+};
+Pages.deletePart = async(id)=>{
+  const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
+  const {error} = await sb.from('parts').delete().eq('id', id);
+  if(error){ showToast(error.message); return; }
+  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+};
+
+/* ---- SUPPLIERS ---- */
+Pages.suppliers = ()=>{
+  const t=I18N.t.bind(I18N); const list=Data.suppliers;
+  return `${Pages.topbar('suppliers')}<div class="card">
+  <div class="search-row"><div style="flex:1"></div><button class="btn btn-accent" onclick="Pages.openSupplierModal()">+ ${t('addSupplier')}</button></div>
+  ${list.length? `<table><thead><tr><th>${t('name')}</th><th>${t('phone')}</th><th>${t('address')}</th><th>${t('actions')}</th></tr></thead><tbody>
+    ${list.map(s=>`<tr><td>${s.name}</td><td>${s.phone||'—'}</td><td>${s.address||'—'}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openSupplierModal('${s.id}')">${t('edit')}</button><button class="btn btn-danger btn-sm" onclick="Pages.deleteSupplier('${s.id}')">${t('delete')}</button></td></tr>`).join('')}
+  </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>`;
+};
+Pages.openSupplierModal = (id)=>{
+  const t=I18N.t.bind(I18N); const s = id? Data.suppliers.find(x=>x.id===id):null;
+  Modal.open(s?t('edit'):t('addSupplier'), `
+    <div class="field"><label>${t('name')} <span class="req">*</span></label><input id="sf-name" value="${s?s.name:''}"></div>
+    <div class="field"><label>${t('phone')}</label><input id="sf-phone" value="${s?s.phone||'':''}"></div>
+    <div class="field"><label>${t('address')}</label><input id="sf-addr" value="${s?s.address||'':''}"></div>
+    <div class="field"><label>${t('notes')}</label><textarea id="sf-notes" rows="2">${s?s.notes||'':''}</textarea></div>
+  `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.saveSupplier('${s?s.id:''}')">${t('save')}</button>`);
+};
+Pages.saveSupplier = async(id)=>{
+  const t=I18N.t.bind(I18N); const name=document.getElementById('sf-name').value.trim();
+  if(!name){ showToast(t('requiredFields')); return; }
+  const row = {name, phone:document.getElementById('sf-phone').value.trim(), address:document.getElementById('sf-addr').value.trim(), notes:document.getElementById('sf-notes').value.trim()};
+  const {error} = id? await sb.from('suppliers').update(row).eq('id',id) : await sb.from('suppliers').insert(row);
+  if(error){ showToast(error.message); return; }
+  Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
+};
+Pages.deleteSupplier = async(id)=>{
+  const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
+  const {error}=await sb.from('suppliers').delete().eq('id',id);
+  if(error){ showToast(error.message); return; }
+  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+};
+
+/* ---- CUSTOMERS ---- */
+Pages.customers = ()=>{
+  const t=I18N.t.bind(I18N); const list=Data.customers;
+  return `${Pages.topbar('customers')}<div class="card">
+  <div class="search-row"><div style="flex:1"></div><button class="btn btn-accent" onclick="Pages.openCustomerModal()">+ ${t('addCustomer')}</button></div>
+  ${list.length? `<table><thead><tr><th>${t('name')}</th><th>${t('phone')}</th><th>${t('address')}</th><th>${t('total')}</th><th>${t('actions')}</th></tr></thead><tbody>
+    ${list.map(c=>{ const spent=Data.sales.filter(s=>s.customer_id===c.id).reduce((a,s)=>a+Number(s.total),0);
+      return `<tr><td>${c.name}</td><td>${c.phone||'—'}</td><td>${c.address||'—'}</td><td class="tabular">${money(spent)}</td>
+      <td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openCustomerModal('${c.id}')">${t('edit')}</button><button class="btn btn-danger btn-sm" onclick="Pages.deleteCustomer('${c.id}')">${t('delete')}</button></td></tr>`; }).join('')}
+  </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>`;
+};
+Pages.openCustomerModal = (id)=>{
+  const t=I18N.t.bind(I18N); const c = id? Data.customers.find(x=>x.id===id):null;
+  Modal.open(c?t('edit'):t('addCustomer'), `
+    <div class="field"><label>${t('name')} <span class="req">*</span></label><input id="cf-name" value="${c?c.name:''}"></div>
+    <div class="field"><label>${t('phone')}</label><input id="cf-phone" value="${c?c.phone||'':''}"></div>
+    <div class="field"><label>${t('address')}</label><input id="cf-addr" value="${c?c.address||'':''}"></div>
+    <div class="field"><label>${t('notes')}</label><textarea id="cf-notes" rows="2">${c?c.notes||'':''}</textarea></div>
+  `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.saveCustomer('${c?c.id:''}')">${t('save')}</button>`);
+};
+Pages.saveCustomer = async(id)=>{
+  const t=I18N.t.bind(I18N); const name=document.getElementById('cf-name').value.trim();
+  if(!name){ showToast(t('requiredFields')); return; }
+  const row = {name, phone:document.getElementById('cf-phone').value.trim(), address:document.getElementById('cf-addr').value.trim(), notes:document.getElementById('cf-notes').value.trim()};
+  const {error} = id? await sb.from('customers').update(row).eq('id',id) : await sb.from('customers').insert(row);
+  if(error){ showToast(error.message); return; }
+  Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
+};
+Pages.deleteCustomer = async(id)=>{
+  const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
+  const {error}=await sb.from('customers').delete().eq('id',id);
+  if(error){ showToast(error.message); return; }
+  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+};
+
+/* ---- PURCHASES ---- */
+Pages._purchaseCart = [];
+Pages.purchases = ()=>{
+  const t=I18N.t.bind(I18N); const suppliers=Data.suppliers; const purchases=Data.purchases;
+  const supOptions = `<option value="">${t('selectSupplier')}</option>` + suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  return `${Pages.topbar('purchases')}<div class="grid grid-2">
+  <div class="card"><h3>${t('recordPurchase')}</h3>
+    <div class="field"><label>${t('supplier')}</label><select id="pu-supplier">${supOptions}</select></div>
+    <div id="pu-cart">${Pages.renderPurchaseCart()}</div>
+    <button class="btn btn-primary" style="margin-top:10px;" onclick="Pages.addPurchaseItem()">+ ${t('addItem')}</button>
+    <button class="btn btn-accent" style="margin-top:10px; margin-inline-start:8px;" onclick="Pages.savePurchase()">${t('recordPurchase')}</button>
+  </div>
+  <div class="card"><h3>${t('purchaseList')}</h3>
+    ${purchases.length? `<table><thead><tr><th>${t('date')}</th><th>${t('supplier')}</th><th>${t('total')}</th></tr></thead><tbody>
+    ${purchases.map(p=>{ const s=suppliers.find(x=>x.id===p.supplier_id); return `<tr><td>${p.created_at.slice(0,16).replace('T',' ')}</td><td>${s?s.name:'—'}</td><td class="tabular">${money(p.total)}</td></tr>`; }).join('')}
+    </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
+  </div>`;
+};
+Pages.renderPurchaseCart = ()=>{
+  const t=I18N.t.bind(I18N); const parts=Data.parts;
+  if(!Pages._purchaseCart.length) return `<div class="muted" style="padding:10px 0;">${t('cartEmptyMsg')}</div>`;
+  return Pages._purchaseCart.map((row,i)=>{
+    const options = parts.map(p=>`<option value="${p.id}" ${row.partId===p.id?'selected':''}>${p.name}</option>`).join('');
+    return `<div class="cart-line"><select class="cn" onchange="Pages.updatePurchaseRow(${i},'partId',this.value)"><option value="">—</option>${options}</select>
+      <input type="number" min="1" value="${row.qty}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
+      <input type="number" min="0" step="0.01" placeholder="${t('costPrice')}" value="${row.cost}" onchange="Pages.updatePurchaseRow(${i},'cost',this.value)">
+      <button class="close-x" onclick="Pages.removePurchaseRow(${i})">✕</button></div>`;
+  }).join('');
+};
+Pages.addPurchaseItem = ()=>{ Pages._purchaseCart.push({partId:'', qty:1, cost:0}); document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); };
+Pages.updatePurchaseRow = (i,field,val)=>{ Pages._purchaseCart[i][field]= field==='partId'?val:parseFloat(val)||0;
+  if(field==='partId'){ const p=Data.parts.find(x=>x.id===val); if(p){ Pages._purchaseCart[i].cost = p.cost_price; } document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); } };
+Pages.removePurchaseRow = (i)=>{ Pages._purchaseCart.splice(i,1); document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); };
+Pages.savePurchase = async()=>{
+  const t=I18N.t.bind(I18N);
+  const supplier_id = document.getElementById('pu-supplier').value || null;
+  const items = Pages._purchaseCart.filter(r=>r.partId && r.qty>0);
+  if(!items.length){ showToast(t('requiredFields')); return; }
+  const total = items.reduce((a,it)=>a+it.qty*it.cost,0);
+  const {data: purchase, error} = await sb.from('purchases').insert({supplier_id, total, staff_id:Auth.current.id}).select().single();
+  if(error){ showToast(error.message); return; }
+  const itemRows = items.map(it=>({purchase_id:purchase.id, part_id:it.partId, qty:it.qty, cost:it.cost}));
+  await sb.from('purchase_items').insert(itemRows);
+  for(const it of items){
+    const p = Data.parts.find(x=>x.id===it.partId);
+    if(p) await sb.from('parts').update({ stock: Number(p.stock)+Number(it.qty), cost_price: it.cost>0? it.cost : p.cost_price }).eq('id', it.partId);
+  }
+  Pages._purchaseCart = [];
+  showToast(t('purchaseDone')); await Data.refreshAll(); Router.render();
+};
+
+/* ---- POS ---- */
+Pages._cart = [];
+Pages.pos = ()=>{
+  const t=I18N.t.bind(I18N);
+  const custOptions = `<option value="">${t('walkIn')}</option>` + Data.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  return `${Pages.topbar('pos')}<div class="pos-wrap">
+  <div class="card"><h3>${t('inventory')}</h3>
+    <input id="pos-search" placeholder="${t('searchPart')}" style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);margin-bottom:12px;" oninput="Pages.renderPosParts()">
+    <div id="pos-parts">${Pages.renderPosParts()}</div>
+  </div>
+  <div class="card"><h3>${t('cart')}</h3>
+    <div class="field"><label>${t('selectCustomer')}</label><select id="pos-customer">${custOptions}</select></div>
+    <div id="pos-cart">${Pages.renderCart()}</div>
+    <div class="field" style="margin-top:10px;"><label>${t('discount')} (${t('currency')})</label><input id="pos-discount" type="number" min="0" step="0.01" value="0" oninput="Pages.renderCart()"></div>
+    <div id="pos-totals"></div>
+    <div class="field"><label>${t('paid')}</label><input id="pos-paid" type="number" min="0" step="0.01" placeholder="0.00"></div>
+    <button class="btn btn-accent btn-block" onclick="Pages.checkout()">${t('checkout')}</button>
+  </div></div>`;
+};
+Pages.renderPosParts = ()=>{
+  const t=I18N.t.bind(I18N); const q=(document.getElementById('pos-search')?.value||'').toLowerCase();
+  const parts = Data.parts.filter(p=>Number(p.stock)>0 && (!q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)));
+  if(!parts.length) return `<div class="empty-state">${t('noData')}</div>`;
+  return parts.map(p=>`<div class="part-pick" onclick="Pages.addToCart('${p.id}')"><div><div class="pn">${p.name}</div><div class="pm">${p.sku||''} · ${t('stock')}: ${p.stock} ${p.unit||''}</div></div><div class="tabular" style="font-weight:700;">${money(p.sell_price)}</div></div>`).join('');
+};
+Pages.addToCart = (partId)=>{
+  const p = Data.parts.find(x=>x.id===partId); if(!p) return;
+  const existing = Pages._cart.find(c=>c.partId===partId);
+  if(existing){ if(existing.qty < Number(p.stock)) existing.qty++; }
+  else{ Pages._cart.push({partId, qty:1, price:Number(p.sell_price), name:p.name, cost:Number(p.cost_price)}); }
+  document.getElementById('pos-cart').innerHTML = Pages.renderCart();
+};
+Pages.renderCart = ()=>{
+  const t=I18N.t.bind(I18N); let subtotal=0;
+  let rows = Pages._cart.map((c,i)=>{ subtotal += c.qty*c.price;
+    return `<div class="cart-line"><div class="cn">${c.name}</div><input type="number" min="1" value="${c.qty}" onchange="Pages.updateCartQty(${i}, this.value)">
+    <div class="tabular" style="width:70px;text-align:right;">${money(c.qty*c.price)}</div><button class="close-x" onclick="Pages.removeCartItem(${i})">✕</button></div>`; }).join('');
+  if(!Pages._cart.length) rows = `<div class="muted" style="padding:10px 0;">${t('cartEmptyMsg')}</div>`;
+  const discount = parseFloat(document.getElementById('pos-discount')?.value)||0;
+  const grand = Math.max(0, subtotal-discount);
+  setTimeout(()=>{ const tt=document.getElementById('pos-totals'); if(tt) tt.innerHTML = `<div class="cart-total-row"><span>${t('subtotal')}</span><span class="tabular">${money(subtotal)}</span></div><div class="cart-total-row grand"><span>${t('grandTotal')}</span><span class="tabular">${money(grand)} ${t('currency')}</span></div>`; },0);
+  return rows;
+};
+Pages.updateCartQty = (i,val)=>{ const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId); let q=parseInt(val)||1; if(p&&q>Number(p.stock)) q=Number(p.stock); c.qty=Math.max(1,q); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
+Pages.removeCartItem = (i)=>{ Pages._cart.splice(i,1); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
+Pages.checkout = async()=>{
+  const t=I18N.t.bind(I18N);
+  if(!Pages._cart.length){ showToast(t('requiredFields')); return; }
+  const discount = parseFloat(document.getElementById('pos-discount').value)||0;
+  const subtotal = Pages._cart.reduce((a,c)=>a+c.qty*c.price,0);
+  const grand = Math.max(0, subtotal-discount);
+  const paid = parseFloat(document.getElementById('pos-paid').value);
+  if(isNaN(paid) || paid < grand){ showToast(t('changeInvalid')); return; }
+  for(const c of Pages._cart){ const p = Data.parts.find(x=>x.id===c.partId); if(!p || Number(p.stock) < c.qty){ showToast(t('insufficientStock')); return; } }
+  const receipt_no = (Data.sales.length+1).toString().padStart(5,'0');
+  const {data: sale, error} = await sb.from('sales').insert({
+    receipt_no, customer_id: document.getElementById('pos-customer').value || null,
+    subtotal, discount, total:grand, paid, change: paid-grand, staff_id:Auth.current.id
+  }).select().single();
+  if(error){ showToast(error.message); return; }
+  const itemRows = Pages._cart.map(c=>({sale_id:sale.id, part_id:c.partId, name:c.name, qty:c.qty, price:c.price, cost:c.cost}));
+  await sb.from('sale_items').insert(itemRows);
+  for(const c of Pages._cart){ const p = Data.parts.find(x=>x.id===c.partId); await sb.from('parts').update({stock: Number(p.stock)-c.qty}).eq('id', c.partId); }
+  Pages.printReceipt({...sale, items:Pages._cart});
+  Pages._cart = [];
+  document.getElementById('pos-paid').value=''; document.getElementById('pos-discount').value='0';
+  showToast(t('saleDone')); await Data.refreshAll(); Router.render();
+};
+Pages.printReceipt = (sale)=>{
+  const t=I18N.t.bind(I18N);
+  const cust = Data.customers.find(c=>c.id===sale.customer_id);
+  const staff = Auth.current;
+  const html = `<div class="rc-head"><div class="shop">Brother Cond. — ${t('branch')}</div><div class="meta">${t('shopAddress')}</div></div><div class="rc-sep"></div>
+    <div class="rc-line"><span>${t('receiptNo')}</span><span>#${sale.receipt_no}</span></div>
+    <div class="rc-line"><span>${t('date')}</span><span>${new Date().toISOString().slice(0,16).replace('T',' ')}</span></div>
+    <div class="rc-line"><span>${t('selectCustomer')}</span><span>${cust?cust.name:t('walkIn')}</span></div><div class="rc-sep"></div>
+    ${sale.items.map(it=>`<div class="rc-line"><span>${it.name} × ${it.qty}</span><span>${money(it.qty*it.price)}</span></div>`).join('')}
+    <div class="rc-sep"></div>
+    <div class="rc-line"><span>${t('subtotal')}</span><span>${money(sale.subtotal)}</span></div>
+    <div class="rc-line"><span>${t('discount')}</span><span>${money(sale.discount)}</span></div>
+    <div class="rc-line rc-tot"><span>${t('grandTotal')}</span><span>${money(sale.total)} ${t('currency')}</span></div>
+    <div class="rc-line"><span>${t('paid')}</span><span>${money(sale.paid)}</span></div>
+    <div class="rc-line"><span>${t('change')}</span><span>${money(sale.change)}</span></div><div class="rc-sep"></div>
+    <div class="rc-line"><span>${t('printedBy')}</span><span>${staff.full_name||staff.email}</span></div>
+    <div style="text-align:center;margin-top:8px;font-size:11px;">${t('thankYou')}</div>`;
+  document.getElementById('receipt-print').innerHTML = html;
+  setTimeout(()=>window.print(), 150);
+};
+
+/* ---- FINANCE ---- */
+Pages.finance = ()=>{
+  const t=I18N.t.bind(I18N);
+  if(!Auth.isAdmin()) return `${Pages.topbar('finance')}<div class="card"><div class="empty-state">${t('accessDenied')}</div></div>`;
+  const sales=Data.sales, expenses=Data.expenses, parts=Data.parts;
+  const revenue = sales.reduce((a,s)=>a+Number(s.total),0);
+  const cogs = sales.reduce((a,s)=>a + (s.sale_items||[]).reduce((b,it)=>b+Number(it.qty)*Number(it.cost),0), 0);
+  const grossProfit = revenue - cogs;
+  const otherExp = expenses.reduce((a,e)=>a+Number(e.amount),0);
+  const netProfit = grossProfit - otherExp;
+  const invValue = parts.reduce((a,p)=>a+Number(p.stock)*Number(p.cost_price),0);
+  const recentSales = sales.slice(0,8), recentExp = expenses.slice(0,8);
+  return `${Pages.topbar('finance')}
+  <div class="grid grid-3">
+    <div class="stat-card success"><div class="stat-label">${t('revenue')}</div><div class="stat-value tabular">${money(revenue)}</div></div>
+    <div class="stat-card"><div class="stat-label">${t('cogs')}</div><div class="stat-value tabular">${money(cogs)}</div></div>
+    <div class="stat-card"><div class="stat-label">${t('grossProfit')}</div><div class="stat-value tabular">${money(grossProfit)}</div></div>
+    <div class="stat-card danger"><div class="stat-label">${t('otherExpenses')}</div><div class="stat-value tabular">${money(otherExp)}</div></div>
+    <div class="stat-card success"><div class="stat-label">${t('netProfit')}</div><div class="stat-value tabular">${money(netProfit)}</div></div>
+    <div class="stat-card"><div class="stat-label">${t('inventoryValue')}</div><div class="stat-value tabular">${money(invValue)}</div></div>
+  </div>
+  <div class="grid grid-2">
+    <div class="card"><h3>${t('recentSales')}</h3>${recentSales.length? `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('total')}</th></tr></thead><tbody>${recentSales.map(s=>`<tr><td>#${s.receipt_no}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td class="tabular">${money(s.total)}</td></tr>`).join('')}</tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
+    <div class="card"><div class="search-row"><h3 style="margin:0;flex:1;">${t('expenseList')}</h3><button class="btn btn-accent btn-sm" onclick="Pages.openExpenseModal()">+ ${t('addExpense')}</button></div>
+    ${recentExp.length? `<table><thead><tr><th>${t('date')}</th><th>${t('expenseCategory')}</th><th>${t('amount')}</th><th></th></tr></thead><tbody>${recentExp.map(e=>`<tr><td>${e.date}</td><td>${e.category}</td><td class="tabular">${money(e.amount)}</td><td><button class="btn btn-danger btn-sm" onclick="Pages.deleteExpense('${e.id}')">${t('delete')}</button></td></tr>`).join('')}</tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
+  </div>`;
+};
+Pages.openExpenseModal = ()=>{
+  const t=I18N.t.bind(I18N);
+  Modal.open(t('addExpense'), `
+    <div class="field"><label>${t('expenseCategory')} <span class="req">*</span></label><input id="ef-cat" placeholder="Rent, electricity, transport..."></div>
+    <div class="field"><label>${t('amount')} <span class="req">*</span></label><input id="ef-amt" type="number" step="0.01"></div>
+    <div class="field"><label>${t('date')}</label><input id="ef-date" type="date" value="${todayStr()}"></div>
+    <div class="field"><label>${t('notes')}</label><textarea id="ef-notes" rows="2"></textarea></div>
+  `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.saveExpense()">${t('save')}</button>`);
+};
+Pages.saveExpense = async()=>{
+  const t=I18N.t.bind(I18N);
+  const category=document.getElementById('ef-cat').value.trim(); const amount=parseFloat(document.getElementById('ef-amt').value);
+  if(!category||isNaN(amount)){ showToast(t('requiredFields')); return; }
+  const {error} = await sb.from('expenses').insert({category, amount, date:document.getElementById('ef-date').value||todayStr(), note:document.getElementById('ef-notes').value.trim()});
+  if(error){ showToast(error.message); return; }
+  Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
+};
+Pages.deleteExpense = async(id)=>{
+  const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
+  const {error}=await sb.from('expenses').delete().eq('id',id);
+  if(error){ showToast(error.message); return; }
+  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+};
+
+/* ---- STAFF ---- */
+Pages.staff = ()=>{
+  const t=I18N.t.bind(I18N);
+  if(!Auth.isAdmin()) return `${Pages.topbar('staff')}<div class="card"><div class="empty-state">${t('accessDenied')}</div></div>`;
+  const list = Data.profiles;
+  return `${Pages.topbar('staff')}<div class="card">
+    <p class="muted">${t('addStaffHint')}</p>
+    <table><thead><tr><th>${t('fullName')}</th><th>${t('username')}</th><th>${t('role')}</th><th>${t('actions')}</th></tr></thead><tbody>
+    ${list.map(s=>`<tr><td>${s.full_name||'—'}</td><td>${s.email||'—'}</td><td>${s.role==='admin'?t('admin'):t('staffRole')}</td>
+    <td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openStaffModal('${s.id}')">${t('edit')}</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+};
+Pages.openStaffModal = (id)=>{
+  const t=I18N.t.bind(I18N); const s = Data.profiles.find(x=>x.id===id);
+  Modal.open(t('edit'), `
+    <div class="field"><label>${t('fullName')}</label><input id="stf-name" value="${s.full_name||''}"></div>
+    <div class="field"><label>${t('role')}</label><select id="stf-role"><option value="staff" ${s.role==='staff'?'selected':''}>${t('staffRole')}</option><option value="admin" ${s.role==='admin'?'selected':''}>${t('admin')}</option></select></div>
+  `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.saveStaff('${id}')">${t('save')}</button>`);
+};
+Pages.saveStaff = async(id)=>{
+  const t=I18N.t.bind(I18N);
+  const full_name = document.getElementById('stf-name').value.trim();
+  const role = document.getElementById('stf-role').value;
+  const {error} = await sb.from('profiles').update({full_name, role}).eq('id', id);
+  if(error){ showToast(error.message); return; }
+  Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
+};
+
+/* ============================================================
+   APP BOOT
+============================================================ */
+const App = {
+  async bootAfterLogin(){ await Data.refreshAll(); Router.render(); },
+  async init(){
+    I18N.set('ar');
+    if(!sb) return;
+    document.getElementById('lg-username').addEventListener('keydown', e=>{ if(e.key==='Enter') Auth.login(); });
+    document.getElementById('lg-password').addEventListener('keydown', e=>{ if(e.key==='Enter') Auth.login(); });
+    await Auth.restoreSession();
+  }
+};
+App.init();
+</script>
+</body>
+</html>
