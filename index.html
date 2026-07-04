@@ -88,9 +88,29 @@
   .toast{ position:fixed; bottom:22px; right:22px; background:var(--primary); color:#fff; padding:12px 18px; border-radius:9px; box-shadow:var(--shadow); font-size:13.5px; font-weight:600; z-index:100; opacity:0; transform:translateY(10px); transition:all .25s ease; }
   body[dir="rtl"] .toast{ right:auto; left:22px; } .toast.show{ opacity:1; transform:translateY(0); }
   #receipt-print{ display:none; }
-  @media print{ body *{ visibility:hidden; } #receipt-print, #receipt-print *{ visibility:visible; } #receipt-print{ display:block; position:absolute; top:0; left:0; width:100%; padding:14px; } }
-  .rc-head{ text-align:center; margin-bottom:10px; } .rc-head .shop{ font-weight:800; font-size:16px; } .rc-head .meta{ font-size:11.5px; color:#333; }
-  .rc-line{ display:flex; justify-content:space-between; font-size:12px; padding:3px 0; } .rc-tot{ border-top:1px dashed #333; margin-top:6px; padding-top:6px; font-weight:800; } .rc-sep{ border-top:1px dashed #333; margin:8px 0; }
+  @media print{
+    @page{ margin: 12mm; }
+    body *{ visibility:hidden; }
+    #receipt-print, #receipt-print *{ visibility:visible; }
+    #receipt-print{ display:block; position:absolute; top:0; left:0; width:100%; padding:0; font-family:'IBM Plex Sans', Arial, sans-serif; color:#141414; }
+  }
+  .rc-doc{ max-width:720px; margin:0 auto; }
+  .rc-titlebar{ text-align:center; letter-spacing:2px; font-size:12px; font-weight:700; color:#444; text-transform:uppercase; border-top:2px solid #141414; border-bottom:2px solid #141414; padding:5px 0; margin:10px 0 14px; }
+  .rc-meta-grid{ display:flex; justify-content:space-between; font-size:12px; margin-bottom:12px; gap:20px; }
+  .rc-meta-grid div div{ padding:2px 0; }
+  .rc-meta-grid .label{ color:#666; display:inline-block; min-width:80px; }
+  .rc-table{ width:100%; border-collapse:collapse; margin:6px 0 14px; }
+  .rc-table thead th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; color:#fff; background:#16324F; padding:7px 8px; }
+  .rc-table thead th.num{ text-align:right; }
+  .rc-table tbody td{ font-size:12px; padding:7px 8px; border-bottom:1px solid #ddd; }
+  .rc-table tbody td.num{ text-align:right; font-variant-numeric:tabular-nums; }
+  .rc-table tbody tr:nth-child(even){ background:#F6F8FA; }
+  .rc-totals{ width:280px; margin-left:auto; font-size:12.5px; }
+  body[dir="rtl"] .rc-totals{ margin-left:0; margin-right:auto; }
+  .rc-totals .row{ display:flex; justify-content:space-between; padding:4px 2px; }
+  .rc-totals .row.grand{ border-top:2px solid #141414; margin-top:4px; padding-top:8px; font-size:15px; font-weight:800; color:#16324F; }
+  .rc-footer{ margin-top:22px; padding-top:10px; border-top:1px dashed #999; font-size:11px; color:#444; display:flex; justify-content:space-between; }
+  .rc-thanks{ text-align:center; margin-top:16px; font-size:12px; font-style:italic; color:#333; }
   ::placeholder{ color:#9AA7B2; } .muted{ color:var(--ink-soft); font-size:12.5px; } .req{ color:var(--danger); }
   #boot-error{ display:none; position:fixed; inset:0; background:#fff; z-index:999; padding:40px; font-family:sans-serif; color:#C1443C; }
 </style>
@@ -200,6 +220,8 @@ en:{
   soldItems:"Items in this sale", selectItemToReturn:"Select item to return", invalidReturnQty:"Enter a valid quantity to return.",
   confirmDeletePurchase:"Delete this purchase? The quantities it added will be removed from inventory again.",
   confirmDeleteSale:"Delete this sale? Its items will be added back to inventory (minus any already returned).",
+  receipts:"Receipts", searchReceipts:"Search by receipt number or customer name...", print:"Print",
+  servedBy:"Served by", noSalesYet:"No sales recorded yet.",
 },
 ar:{
   appName:"نظام قطع الغيار", branch:"فرع مدينتي",
@@ -242,6 +264,8 @@ ar:{
   soldItems:"الأصناف في هذه العملية", selectItemToReturn:"اختر الصنف المراد إرجاعه", invalidReturnQty:"أدخل كمية صحيحة للإرجاع.",
   confirmDeletePurchase:"هل تريد حذف عملية الشراء هذه؟ سيتم خصم الكميات التي أضافتها من المخزون مرة أخرى.",
   confirmDeleteSale:"هل تريد حذف عملية البيع هذه؟ سيتم إعادة أصنافها إلى المخزون (بعد خصم ما تم إرجاعه مسبقاً إن وجد).",
+  receipts:"الإيصالات", searchReceipts:"ابحث برقم الإيصال أو اسم العميل...", print:"طباعة",
+  servedBy:"باعه", noSalesYet:"لا توجد عمليات بيع مسجلة بعد.",
 }
 };
 const I18N = {
@@ -369,6 +393,7 @@ const NAV_ITEMS = [
   {key:'dashboard', icon:'◆', adminOnly:false}, {key:'inventory', icon:'▣', adminOnly:false},
   {key:'suppliers', icon:'⇄', adminOnly:false}, {key:'purchases', icon:'⇩', adminOnly:false},
   {key:'pos', icon:'🛒', adminOnly:false}, {key:'returns', icon:'↺', adminOnly:false},
+  {key:'receipts', icon:'🧾', adminOnly:false},
   {key:'customers', icon:'☺', adminOnly:false},
   {key:'finance', icon:'▤', adminOnly:true}, {key:'staff', icon:'⚙', adminOnly:true},
 ];
@@ -386,11 +411,13 @@ const Router = {
     const item = NAV_ITEMS.find(n=>n.key===this.active);
     const page = (!item.adminOnly || Auth.isAdmin()) ? this.active : 'dashboard';
     this.active = page;
-    const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, returns:Pages.returns, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
+    const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, returns:Pages.returns, receipts:Pages.receipts, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
     document.getElementById('main').innerHTML = renderers[page]();
     if(page==='pos' && Pages._pendingCustomerSelect){
-      const sel = document.getElementById('pos-customer');
-      if(sel){ sel.value = Pages._pendingCustomerSelect; }
+      const hid = document.getElementById('pos-customer');
+      const inp = document.getElementById('pos-customer-input');
+      if(hid){ hid.value = Pages._pendingCustomerSelect.id; }
+      if(inp){ inp.value = Pages._pendingCustomerSelect.name; }
       Pages._pendingCustomerSelect = null;
     }
   }
@@ -550,12 +577,9 @@ Pages.saveCustomer = async(id)=>{
   }else{
     const {data, error} = await sb.from('customers').insert(row).select().single();
     if(error){ showToast(error.message); return; }
-    if(forPos && data){ Pages._pendingCustomerSelect = data.id; }
+    if(forPos && data){ Pages._pendingCustomerSelect = {id:data.id, name:data.name}; }
   }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
-};
-Pages.handlePosCustomerChange = (selectEl)=>{
-  if(selectEl.value==='__new__'){ selectEl.value=''; Pages.openCustomerModal(null, true); }
 };
 Pages.deleteCustomer = async(id)=>{
   const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
@@ -632,14 +656,20 @@ Pages.savePurchase = async()=>{
 Pages._cart = [];
 Pages.pos = ()=>{
   const t=I18N.t.bind(I18N);
-  const custOptions = `<option value="">${t('walkIn')}</option>` + Data.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('') + `<option value="__new__">+ ${t('addCustomer')}</option>`;
   return `${Pages.topbar('pos')}<div class="pos-wrap">
   <div class="card"><h3>${t('inventory')}</h3>
     <input id="pos-search" placeholder="${t('searchPart')}" style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);margin-bottom:12px;" oninput="Pages.refreshPosParts()">
     <div id="pos-parts">${Pages.renderPosParts()}</div>
   </div>
   <div class="card"><h3>${t('cart')}</h3>
-    <div class="field"><label>${t('selectCustomer')}</label><select id="pos-customer" onchange="Pages.handlePosCustomerChange(this)">${custOptions}</select></div>
+    <div class="field" style="position:relative;">
+      <label>${t('selectCustomer')}</label>
+      <input type="text" id="pos-customer-input" placeholder="${t('searchReceipts')}" autocomplete="off"
+        oninput="Pages.filterCustomerSuggestions()" onfocus="Pages.filterCustomerSuggestions()"
+        onblur="setTimeout(()=>{const b=document.getElementById('pos-customer-suggestions'); if(b) b.style.display='none';},150)">
+      <input type="hidden" id="pos-customer" value="">
+      <div id="pos-customer-suggestions" style="display:none;position:absolute;z-index:20;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;width:100%;box-shadow:var(--shadow);"></div>
+    </div>
     <div id="pos-cart">${Pages.renderCart()}</div>
     <div class="field" style="margin-top:10px;"><label>${t('discount')} (${t('currency')})</label><input id="pos-discount" type="text" inputmode="decimal" value="0" oninput="Pages.renderCart()"></div>
     <div id="pos-totals"></div>
@@ -650,6 +680,29 @@ Pages.pos = ()=>{
     <h3>${t('recentSales')}</h3>
     ${Pages.renderSalesHistoryTable()}
   </div>`;
+};
+Pages.filterCustomerSuggestions = ()=>{
+  const t=I18N.t.bind(I18N);
+  const q = document.getElementById('pos-customer-input').value.trim().toLowerCase();
+  const box = document.getElementById('pos-customer-suggestions');
+  const matches = Data.customers.filter(c=>!q || c.name.toLowerCase().includes(q)).slice(0,8);
+  let html = `<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);" onmousedown="Pages.selectPosCustomer('', '')">${t('walkIn')}</div>`;
+  html += matches.map(c=>`<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);" onmousedown="Pages.selectPosCustomer('${c.id}', '${c.name.replace(/'/g,"\\'")}')">${c.name}${c.phone?` · ${c.phone}`:''}</div>`).join('');
+  if(q && !matches.some(c=>c.name.toLowerCase()===q)){
+    html += `<div style="padding:8px 10px;cursor:pointer;color:var(--primary);font-weight:700;" onmousedown="Pages.quickAddCustomerWithName('${q.replace(/'/g,"\\'")}')">+ ${t('addCustomer')}: "${document.getElementById('pos-customer-input').value.trim()}"</div>`;
+  }
+  box.innerHTML = html;
+  box.style.display = 'block';
+};
+Pages.selectPosCustomer = (id, name)=>{
+  document.getElementById('pos-customer').value = id;
+  document.getElementById('pos-customer-input').value = name;
+  document.getElementById('pos-customer-suggestions').style.display='none';
+};
+Pages.quickAddCustomerWithName = (name)=>{
+  document.getElementById('pos-customer-suggestions').style.display='none';
+  Pages.openCustomerModal(null, true);
+  setTimeout(()=>{ const el=document.getElementById('cf-name'); if(el) el.value = name; },0);
 };
 Pages.renderSalesHistoryTable = ()=>{
   const t=I18N.t.bind(I18N);
@@ -730,36 +783,107 @@ Pages.checkout = async()=>{
   document.getElementById('pos-paid').value=''; document.getElementById('pos-discount').value='0';
   showToast(t('saleDone')); await Data.refreshAll(); Router.render();
 };
-Pages.printReceipt = (sale)=>{
+Pages.buildReceiptHtml = ({receiptNo, dateStr, customerName, items, subtotal, discount, total, paid, change, staffName})=>{
   const t=I18N.t.bind(I18N);
-  const cust = Data.customers.find(c=>c.id===sale.customer_id);
-  const staff = Auth.current;
-  const html = `
-    <div class="rc-letterhead" style="direction:ltr; display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
-      <img src="logo.png" alt="Brother Cond" style="width:56px;height:56px;object-fit:contain;flex-shrink:0;">
-      <div style="text-align:right; font-size:10px; line-height:1.55; color:#111;">
-        <div style="font-weight:800; font-size:13px; margin-bottom:2px;">Brother Cond For Air Conditioning</div>
+  return `
+  <div class="rc-doc">
+    <div class="rc-letterhead" style="direction:ltr; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+      <img src="logo.png" alt="Brother Cond" style="width:70px;height:70px;object-fit:contain;flex-shrink:0;">
+      <div style="text-align:right; font-size:11px; line-height:1.6; color:#111;">
+        <div style="font-weight:800; font-size:15px; margin-bottom:3px; color:#16324F;">Brother Cond For Air Conditioning</div>
         <div>Showrooms: Nasry city - Rehab City - Madinaty - First settlement</div>
         <div>Tel: 01006889931 &ndash; 01026586700</div>
         <div>After Service Center: 01284142408 - 01271232158</div>
         <div>Hotline: 01222211310</div>
       </div>
     </div>
-    <div class="rc-sep"></div>
-    <div class="rc-line"><span>${t('receiptNo')}</span><span>#${sale.receipt_no}</span></div>
-    <div class="rc-line"><span>${t('date')}</span><span>${new Date().toISOString().slice(0,16).replace('T',' ')}</span></div>
-    <div class="rc-line"><span>${t('selectCustomer')}</span><span>${cust?cust.name:t('walkIn')}</span></div><div class="rc-sep"></div>
-    ${sale.items.map(it=>`<div class="rc-line"><span>${it.name} × ${it.qty}</span><span>${money(it.qty*it.price)}</span></div>`).join('')}
-    <div class="rc-sep"></div>
-    <div class="rc-line"><span>${t('subtotal')}</span><span>${money(sale.subtotal)}</span></div>
-    <div class="rc-line"><span>${t('discount')}</span><span>${money(sale.discount)}</span></div>
-    <div class="rc-line rc-tot"><span>${t('grandTotal')}</span><span>${money(sale.total)} ${t('currency')}</span></div>
-    <div class="rc-line"><span>${t('paid')}</span><span>${money(sale.paid)}</span></div>
-    <div class="rc-line"><span>${t('change')}</span><span>${money(sale.change)}</span></div><div class="rc-sep"></div>
-    <div class="rc-line"><span>${t('printedBy')}</span><span>${staff.full_name||staff.email}</span></div>
-    <div style="text-align:center;margin-top:8px;font-size:11px;">${t('thankYou')}</div>`;
+    <div class="rc-titlebar">${t('receipts')}</div>
+    <div class="rc-meta-grid">
+      <div>
+        <div><span class="label">${t('receiptNo')}:</span> <b>#${receiptNo}</b></div>
+        <div><span class="label">${t('date')}:</span> ${dateStr}</div>
+      </div>
+      <div style="text-align:right;">
+        <div><span class="label">${t('selectCustomer')}:</span> ${customerName}</div>
+        <div><span class="label">${t('printedBy')}:</span> ${staffName}</div>
+      </div>
+    </div>
+    <table class="rc-table">
+      <thead><tr><th>${t('partName')}</th><th class="num">${t('qty')}</th><th class="num">${t('price')}</th><th class="num">${t('subtotal')}</th></tr></thead>
+      <tbody>
+        ${items.map(it=>`<tr><td>${it.name}</td><td class="num">${it.qty}</td><td class="num">${money(it.price)}</td><td class="num">${money(it.qty*it.price)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="rc-totals">
+      <div class="row"><span>${t('subtotal')}</span><span>${money(subtotal)}</span></div>
+      <div class="row"><span>${t('discount')}</span><span>${money(discount)}</span></div>
+      <div class="row grand"><span>${t('grandTotal')}</span><span>${money(total)} ${t('currency')}</span></div>
+    </div>
+    <div style="text-align:center;margin-top:10px;">
+      <span style="display:inline-block;border:2px solid #2E7D5B;color:#2E7D5B;font-weight:800;font-size:13px;letter-spacing:2px;padding:4px 18px;border-radius:4px;text-transform:uppercase;">${t('paid')}</span>
+    </div>
+    <div class="rc-thanks">${t('thankYou')}</div>
+    <div class="rc-footer"><span>Brother Cond For Air Conditioning</span><span>${t('receiptNo')} #${receiptNo}</span></div>
+  </div>`;
+};
+Pages.printReceipt = (sale)=>{
+  const cust = Data.customers.find(c=>c.id===sale.customer_id);
+  const t=I18N.t.bind(I18N);
+  const html = Pages.buildReceiptHtml({
+    receiptNo: sale.receipt_no, dateStr: new Date().toISOString().slice(0,16).replace('T',' '),
+    customerName: cust?cust.name:t('walkIn'), items: sale.items,
+    subtotal: sale.subtotal, discount: sale.discount, total: sale.total, paid: sale.paid, change: sale.change,
+    staffName: Auth.current.full_name||Auth.current.email
+  });
   document.getElementById('receipt-print').innerHTML = html;
   setTimeout(()=>window.print(), 150);
+};
+Pages.reprintSale = (id)=>{
+  const t=I18N.t.bind(I18N);
+  const sale = Data.sales.find(s=>s.id===id); if(!sale) return;
+  const cust = Data.customers.find(c=>c.id===sale.customer_id);
+  const staffProfile = Data.profiles.find(p=>p.id===sale.staff_id);
+  const html = Pages.buildReceiptHtml({
+    receiptNo: sale.receipt_no, dateStr: sale.created_at.slice(0,16).replace('T',' '),
+    customerName: cust?cust.name:t('walkIn'),
+    items: (sale.sale_items||[]).map(it=>({name:it.name, qty:it.qty, price:it.price})),
+    subtotal: sale.subtotal, discount: sale.discount, total: sale.total, paid: sale.paid, change: sale.change,
+    staffName: staffProfile ? (staffProfile.full_name||staffProfile.email) : '—'
+  });
+  document.getElementById('receipt-print').innerHTML = html;
+  setTimeout(()=>window.print(), 150);
+};
+
+/* ---- RECEIPTS ---- */
+Pages.receipts = ()=>{
+  const t=I18N.t.bind(I18N);
+  return `${Pages.topbar('receipts')}
+  <div class="card">
+    <div class="search-row"><input id="rc-search" placeholder="${t('searchReceipts')}" oninput="Pages.refreshReceiptsTable()"></div>
+    <div id="rc-table-wrap">${Pages.renderReceiptsTable(Data.sales)}</div>
+  </div>`;
+};
+Pages.refreshReceiptsTable = ()=>{
+  const q = document.getElementById('rc-search').value.trim().toLowerCase();
+  const filtered = Data.sales.filter(s=>{
+    if(!q) return true;
+    const cust = Data.customers.find(c=>c.id===s.customer_id);
+    return s.receipt_no.toLowerCase().includes(q) || (cust && cust.name.toLowerCase().includes(q));
+  });
+  document.getElementById('rc-table-wrap').innerHTML = Pages.renderReceiptsTable(filtered);
+};
+Pages.renderReceiptsTable = (sales)=>{
+  const t=I18N.t.bind(I18N);
+  if(!sales.length) return `<div class="empty-state">${t('noSalesYet')}</div>`;
+  return `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('selectCustomer')}</th><th>${t('total')}</th><th>${t('servedBy')}</th><th>${t('actions')}</th></tr></thead><tbody>
+  ${sales.map(s=>{
+    const cust = Data.customers.find(c=>c.id===s.customer_id);
+    const staffProfile = Data.profiles.find(p=>p.id===s.staff_id);
+    return `<tr><td>#${s.receipt_no}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td>${cust?cust.name:t('walkIn')}</td>
+    <td class="tabular">${money(s.total)}</td><td>${staffProfile?(staffProfile.full_name||staffProfile.email):'—'}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="Pages.reprintSale('${s.id}')">🖨 ${t('print')}</button></td></tr>`;
+  }).join('')}
+  </tbody></table>`;
 };
 
 /* ---- RETURNS ---- */
