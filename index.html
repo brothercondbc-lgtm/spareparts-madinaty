@@ -271,6 +271,17 @@ const I18N = {
    HELPERS
 ============================================================ */
 function money(n){ n = Number(n)||0; return n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function normalizeDigits(str){
+  if(str===null||str===undefined) return str;
+  const east='٠١٢٣٤٥٦٧٨٩', ext='۰۱۲۳۴۵۶۷۸۹';
+  return String(str).replace(/[٠-٩۰-۹]/g, d=>{
+    let i=east.indexOf(d); if(i>-1) return i;
+    i=ext.indexOf(d); if(i>-1) return i;
+    return d;
+  });
+}
+function toNum(v){ return parseFloat(normalizeDigits(v)); }
+function toInt(v){ return parseInt(normalizeDigits(v)); }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function showToast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(window.__tt); window.__tt=setTimeout(()=>el.classList.remove('show'),2200); }
 
@@ -375,6 +386,11 @@ const Router = {
     this.active = page;
     const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, returns:Pages.returns, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
     document.getElementById('main').innerHTML = renderers[page]();
+    if(page==='pos' && Pages._pendingCustomerSelect){
+      const sel = document.getElementById('pos-customer');
+      if(sel){ sel.value = Pages._pendingCustomerSelect; }
+      Pages._pendingCustomerSelect = null;
+    }
   }
 };
 
@@ -439,21 +455,21 @@ Pages.openPartModal = (id)=>{
     <div class="grid grid-2"><div class="field"><label>${t('sku')}</label><input id="pf-sku" placeholder="${t('skuPh')}" value="${p?p.sku||'':''}"></div>
     <div class="field"><label>${t('category')}</label><input id="pf-cat" placeholder="${t('categoryPh')}" value="${p?p.category||'':''}"></div></div>
     <div class="field"><label>${t('supplier')}</label><select id="pf-sup">${supOptions}</select></div>
-    <div class="grid grid-3"><div class="field"><label>${t('costPrice')}</label><input id="pf-cost" type="number" step="0.01" value="${p?p.cost_price:''}"></div>
-    <div class="field"><label>${t('sellPrice')}</label><input id="pf-sell" type="number" step="0.01" value="${p?p.sell_price:''}"></div>
+    <div class="grid grid-3"><div class="field"><label>${t('costPrice')}</label><input id="pf-cost" type="text" inputmode="decimal" value="${p?p.cost_price:''}"></div>
+    <div class="field"><label>${t('sellPrice')}</label><input id="pf-sell" type="text" inputmode="decimal" value="${p?p.sell_price:''}"></div>
     <div class="field"><label>${t('unit')}</label><input id="pf-unit" placeholder="pcs" value="${p?p.unit||'':''}"></div></div>
-    <div class="grid grid-2"><div class="field"><label>${t('stock')}</label><input id="pf-stock" type="number" value="${p?p.stock:0}"></div>
-    <div class="field"><label>${t('reorderLevel')}</label><input id="pf-reorder" type="number" value="${p?p.reorder_level:2}"></div></div>
+    <div class="grid grid-2"><div class="field"><label>${t('stock')}</label><input id="pf-stock" type="text" inputmode="numeric" value="${p?p.stock:0}"></div>
+    <div class="field"><label>${t('reorderLevel')}</label><input id="pf-reorder" type="text" inputmode="numeric" value="${p?p.reorder_level:2}"></div></div>
   `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.savePart('${p?p.id:''}')">${t('save')}</button>`);
 };
 Pages.savePart = async(id)=>{
   const t=I18N.t.bind(I18N);
   const name=document.getElementById('pf-name').value.trim();
-  const cost=parseFloat(document.getElementById('pf-cost').value), sell=parseFloat(document.getElementById('pf-sell').value), stock=parseInt(document.getElementById('pf-stock').value);
+  const cost=toNum(document.getElementById('pf-cost').value), sell=toNum(document.getElementById('pf-sell').value), stock=toInt(document.getElementById('pf-stock').value);
   if(!name||isNaN(cost)||isNaN(sell)||isNaN(stock)){ showToast(t('requiredFields')); return; }
   const row = { name, sku:document.getElementById('pf-sku').value.trim(), category:document.getElementById('pf-cat').value.trim(),
     supplier_id: document.getElementById('pf-sup').value||null, cost_price:cost, sell_price:sell,
-    unit:document.getElementById('pf-unit').value.trim()||'pcs', stock, reorder_level:parseInt(document.getElementById('pf-reorder').value)||0 };
+    unit:document.getElementById('pf-unit').value.trim()||'pcs', stock, reorder_level:toInt(document.getElementById('pf-reorder').value)||0 };
   const {error} = id ? await sb.from('parts').update(row).eq('id', id) : await sb.from('parts').insert(row);
   if(error){ showToast(error.message); return; }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
@@ -510,8 +526,9 @@ Pages.customers = ()=>{
       <td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openCustomerModal('${c.id}')">${t('edit')}</button><button class="btn btn-danger btn-sm" onclick="Pages.deleteCustomer('${c.id}')">${t('delete')}</button></td></tr>`; }).join('')}
   </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>`;
 };
-Pages.openCustomerModal = (id)=>{
+Pages.openCustomerModal = (id, forPos)=>{
   const t=I18N.t.bind(I18N); const c = id? Data.customers.find(x=>x.id===id):null;
+  Pages._customerModalForPos = !!forPos;
   Modal.open(c?t('edit'):t('addCustomer'), `
     <div class="field"><label>${t('name')} <span class="req">*</span></label><input id="cf-name" value="${c?c.name:''}"></div>
     <div class="field"><label>${t('phone')}</label><input id="cf-phone" value="${c?c.phone||'':''}"></div>
@@ -523,9 +540,20 @@ Pages.saveCustomer = async(id)=>{
   const t=I18N.t.bind(I18N); const name=document.getElementById('cf-name').value.trim();
   if(!name){ showToast(t('requiredFields')); return; }
   const row = {name, phone:document.getElementById('cf-phone').value.trim(), address:document.getElementById('cf-addr').value.trim(), notes:document.getElementById('cf-notes').value.trim()};
-  const {error} = id? await sb.from('customers').update(row).eq('id',id) : await sb.from('customers').insert(row);
-  if(error){ showToast(error.message); return; }
+  const forPos = Pages._customerModalForPos;
+  Pages._customerModalForPos = false;
+  if(id){
+    const {error} = await sb.from('customers').update(row).eq('id',id);
+    if(error){ showToast(error.message); return; }
+  }else{
+    const {data, error} = await sb.from('customers').insert(row).select().single();
+    if(error){ showToast(error.message); return; }
+    if(forPos && data){ Pages._pendingCustomerSelect = data.id; }
+  }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
+};
+Pages.handlePosCustomerChange = (selectEl)=>{
+  if(selectEl.value==='__new__'){ selectEl.value=''; Pages.openCustomerModal(null, true); }
 };
 Pages.deleteCustomer = async(id)=>{
   const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
@@ -571,13 +599,13 @@ Pages.renderPurchaseCart = ()=>{
   return Pages._purchaseCart.map((row,i)=>{
     const options = parts.map(p=>`<option value="${p.id}" ${row.partId===p.id?'selected':''}>${p.name}</option>`).join('');
     return `<div class="cart-line"><select class="cn" onchange="Pages.updatePurchaseRow(${i},'partId',this.value)"><option value="">—</option>${options}</select>
-      <input type="number" min="1" value="${row.qty}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
-      <input type="number" min="0" step="0.01" placeholder="${t('costPrice')}" value="${row.cost}" onchange="Pages.updatePurchaseRow(${i},'cost',this.value)">
+      <input type="text" inputmode="numeric" value="${row.qty}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
+      <input type="text" inputmode="decimal" placeholder="${t('costPrice')}" value="${row.cost}" onchange="Pages.updatePurchaseRow(${i},'cost',this.value)">
       <button class="close-x" onclick="Pages.removePurchaseRow(${i})">✕</button></div>`;
   }).join('');
 };
 Pages.addPurchaseItem = ()=>{ Pages._purchaseCart.push({partId:'', qty:1, cost:0}); document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); };
-Pages.updatePurchaseRow = (i,field,val)=>{ Pages._purchaseCart[i][field]= field==='partId'?val:parseFloat(val)||0;
+Pages.updatePurchaseRow = (i,field,val)=>{ Pages._purchaseCart[i][field]= field==='partId'?val:toNum(val)||0;
   if(field==='partId'){ const p=Data.parts.find(x=>x.id===val); if(p){ Pages._purchaseCart[i].cost = p.cost_price; } document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); } };
 Pages.removePurchaseRow = (i)=>{ Pages._purchaseCart.splice(i,1); document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); };
 Pages.savePurchase = async()=>{
@@ -602,18 +630,18 @@ Pages.savePurchase = async()=>{
 Pages._cart = [];
 Pages.pos = ()=>{
   const t=I18N.t.bind(I18N);
-  const custOptions = `<option value="">${t('walkIn')}</option>` + Data.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const custOptions = `<option value="">${t('walkIn')}</option>` + Data.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('') + `<option value="__new__">+ ${t('addCustomer')}</option>`;
   return `${Pages.topbar('pos')}<div class="pos-wrap">
   <div class="card"><h3>${t('inventory')}</h3>
     <input id="pos-search" placeholder="${t('searchPart')}" style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);margin-bottom:12px;" oninput="Pages.refreshPosParts()">
     <div id="pos-parts">${Pages.renderPosParts()}</div>
   </div>
   <div class="card"><h3>${t('cart')}</h3>
-    <div class="field"><label>${t('selectCustomer')}</label><select id="pos-customer">${custOptions}</select></div>
+    <div class="field"><label>${t('selectCustomer')}</label><select id="pos-customer" onchange="Pages.handlePosCustomerChange(this)">${custOptions}</select></div>
     <div id="pos-cart">${Pages.renderCart()}</div>
-    <div class="field" style="margin-top:10px;"><label>${t('discount')} (${t('currency')})</label><input id="pos-discount" type="number" min="0" step="0.01" value="0" oninput="Pages.renderCart()"></div>
+    <div class="field" style="margin-top:10px;"><label>${t('discount')} (${t('currency')})</label><input id="pos-discount" type="text" inputmode="decimal" value="0" oninput="Pages.renderCart()"></div>
     <div id="pos-totals"></div>
-    <div class="field"><label>${t('paid')}</label><input id="pos-paid" type="number" min="0" step="0.01" placeholder="0.00"></div>
+    <div class="field"><label>${t('paid')}</label><input id="pos-paid" type="text" inputmode="decimal" placeholder="0.00"></div>
     <button class="btn btn-accent btn-block" onclick="Pages.checkout()">${t('checkout')}</button>
   </div></div>
   <div class="card" style="margin-top:18px;">
@@ -665,25 +693,25 @@ Pages.renderCart = ()=>{
   const t=I18N.t.bind(I18N); let subtotal=0;
   let rows = Pages._cart.map((c,i)=>{ subtotal += c.qty*c.price;
     return `<div class="cart-line"><div class="cn">${c.name}</div>
-    <input type="number" min="1" value="${c.qty}" title="${t('qty')}" onchange="Pages.updateCartQty(${i}, this.value)">
-    <input type="number" min="0" step="0.01" value="${c.price}" title="${t('sellPrice')}" style="width:72px;" onchange="Pages.updateCartPrice(${i}, this.value)">
+    <input type="text" inputmode="numeric" value="${c.qty}" title="${t('qty')}" onchange="Pages.updateCartQty(${i}, this.value)">
+    <input type="text" inputmode="decimal" value="${c.price}" title="${t('sellPrice')}" style="width:72px;" onchange="Pages.updateCartPrice(${i}, this.value)">
     <div class="tabular" style="width:70px;text-align:right;">${money(c.qty*c.price)}</div><button class="close-x" onclick="Pages.removeCartItem(${i})">✕</button></div>`; }).join('');
   if(!Pages._cart.length) rows = `<div class="muted" style="padding:10px 0;">${t('cartEmptyMsg')}</div>`;
-  const discount = parseFloat(document.getElementById('pos-discount')?.value)||0;
+  const discount = toNum(document.getElementById('pos-discount')?.value)||0;
   const grand = Math.max(0, subtotal-discount);
   setTimeout(()=>{ const tt=document.getElementById('pos-totals'); if(tt) tt.innerHTML = `<div class="cart-total-row"><span>${t('subtotal')}</span><span class="tabular">${money(subtotal)}</span></div><div class="cart-total-row grand"><span>${t('grandTotal')}</span><span class="tabular">${money(grand)} ${t('currency')}</span></div>`; },0);
   return rows;
 };
-Pages.updateCartQty = (i,val)=>{ const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId); let q=parseInt(val)||1; if(p&&q>Number(p.stock)) q=Number(p.stock); c.qty=Math.max(1,q); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
-Pages.updateCartPrice = (i,val)=>{ const c=Pages._cart[i]; let pr=parseFloat(val); if(isNaN(pr)||pr<0) pr=0; c.price=pr; document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
+Pages.updateCartQty = (i,val)=>{ const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId); let q=toInt(val)||1; if(p&&q>Number(p.stock)) q=Number(p.stock); c.qty=Math.max(1,q); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
+Pages.updateCartPrice = (i,val)=>{ const c=Pages._cart[i]; let pr=toNum(val); if(isNaN(pr)||pr<0) pr=0; c.price=pr; document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.removeCartItem = (i)=>{ Pages._cart.splice(i,1); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.checkout = async()=>{
   const t=I18N.t.bind(I18N);
   if(!Pages._cart.length){ showToast(t('requiredFields')); return; }
-  const discount = parseFloat(document.getElementById('pos-discount').value)||0;
+  const discount = toNum(document.getElementById('pos-discount').value)||0;
   const subtotal = Pages._cart.reduce((a,c)=>a+c.qty*c.price,0);
   const grand = Math.max(0, subtotal-discount);
-  const paid = parseFloat(document.getElementById('pos-paid').value);
+  const paid = toNum(document.getElementById('pos-paid').value);
   if(isNaN(paid) || paid < grand){ showToast(t('changeInvalid')); return; }
   for(const c of Pages._cart){ const p = Data.parts.find(x=>x.id===c.partId); if(!p || Number(p.stock) < c.qty){ showToast(t('insufficientStock')); return; } }
   const receipt_no = (Data.sales.length+1).toString().padStart(5,'0');
@@ -761,7 +789,7 @@ Pages.findSaleForReturn = ()=>{
       const remaining = Number(it.qty) - already;
       return `<tr>
         <td>${it.name}</td><td>${it.qty}</td><td class="tabular">${money(it.price)}</td>
-        <td><input type="number" min="0" max="${remaining}" value="0" style="width:70px;" id="ret-qty-${it.id}"></td>
+        <td><input type="text" inputmode="decimal" value="0" style="width:70px;" id="ret-qty-${it.id}"></td>
         <td>${remaining<=0? `<span class="muted">${t('alreadyReturned')}</span>` : `<button class="btn btn-outline btn-sm" onclick="Pages.doReturn('${it.id}', ${remaining})">${t('processReturn')}</button>`}</td>
       </tr>`;
     }).join('')}
@@ -773,7 +801,7 @@ Pages.doReturn = async(saleItemId, remaining)=>{
   const t=I18N.t.bind(I18N);
   const sale = Pages._returnSale;
   const item = (sale.sale_items||[]).find(it=>it.id===saleItemId);
-  const qty = parseFloat(document.getElementById(`ret-qty-${saleItemId}`).value);
+  const qty = toNum(document.getElementById(`ret-qty-${saleItemId}`).value);
   if(!qty || qty<=0 || qty>remaining){ showToast(t('invalidReturnQty')); return; }
   const refund_amount = qty * Number(item.price);
   const reason = document.getElementById('ret-reason').value.trim();
@@ -825,14 +853,14 @@ Pages.openExpenseModal = ()=>{
   const t=I18N.t.bind(I18N);
   Modal.open(t('addExpense'), `
     <div class="field"><label>${t('expenseCategory')} <span class="req">*</span></label><input id="ef-cat" placeholder="Rent, electricity, transport..."></div>
-    <div class="field"><label>${t('amount')} <span class="req">*</span></label><input id="ef-amt" type="number" step="0.01"></div>
+    <div class="field"><label>${t('amount')} <span class="req">*</span></label><input id="ef-amt" type="text" inputmode="decimal"></div>
     <div class="field"><label>${t('date')}</label><input id="ef-date" type="date" value="${todayStr()}"></div>
     <div class="field"><label>${t('notes')}</label><textarea id="ef-notes" rows="2"></textarea></div>
   `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.saveExpense()">${t('save')}</button>`);
 };
 Pages.saveExpense = async()=>{
   const t=I18N.t.bind(I18N);
-  const category=document.getElementById('ef-cat').value.trim(); const amount=parseFloat(document.getElementById('ef-amt').value);
+  const category=document.getElementById('ef-cat').value.trim(); const amount=toNum(document.getElementById('ef-amt').value);
   if(!category||isNaN(amount)){ showToast(t('requiredFields')); return; }
   const {error} = await sb.from('expenses').insert({category, amount, date:document.getElementById('ef-date').value||todayStr(), note:document.getElementById('ef-notes').value.trim()});
   if(error){ showToast(error.message); return; }
