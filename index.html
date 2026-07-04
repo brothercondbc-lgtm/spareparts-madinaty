@@ -222,6 +222,7 @@ en:{
   confirmDeleteSale:"Delete this sale? Its items will be added back to inventory (minus any already returned).",
   receipts:"Receipts", searchReceipts:"Search by receipt number or customer name...", print:"Print",
   servedBy:"Served by", noSalesYet:"No sales recorded yet.",
+  returnFullReceipt:"Return entire receipt", confirmFullReturn:"Return every remaining item on this receipt? This restores all of it to inventory.",
 },
 ar:{
   appName:"نظام قطع الغيار", branch:"فرع مدينتي",
@@ -266,6 +267,7 @@ ar:{
   confirmDeleteSale:"هل تريد حذف عملية البيع هذه؟ سيتم إعادة أصنافها إلى المخزون (بعد خصم ما تم إرجاعه مسبقاً إن وجد).",
   receipts:"الإيصالات", searchReceipts:"ابحث برقم الإيصال أو اسم العميل...", print:"طباعة",
   servedBy:"باعه", noSalesYet:"لا توجد عمليات بيع مسجلة بعد.",
+  returnFullReceipt:"إرجاع الإيصال بالكامل", confirmFullReturn:"هل تريد إرجاع كل الأصناف المتبقية في هذا الإيصال؟ سيتم إعادتها جميعاً إلى المخزون.",
 }
 };
 const I18N = {
@@ -916,9 +918,11 @@ Pages.findSaleForReturn = ()=>{
   const cust = Data.customers.find(c=>c.id===sale.customer_id);
   const alreadyReturnedByItem = {};
   Data.returns.filter(r=>r.sale_id===sale.id).forEach(r=>{ alreadyReturnedByItem[r.sale_item_id] = (alreadyReturnedByItem[r.sale_item_id]||0) + Number(r.qty); });
+  const anyRemaining = (sale.sale_items||[]).some(it=> (Number(it.qty)-(alreadyReturnedByItem[it.id]||0)) > 0);
   area.innerHTML = `
-    <div style="margin:12px 0;font-size:13px;">
-      <b>#${sale.receipt_no}</b> · ${sale.created_at.slice(0,16).replace('T',' ')} · ${cust?cust.name:t('walkIn')}
+    <div style="display:flex; align-items:center; justify-content:space-between; margin:12px 0; gap:10px; flex-wrap:wrap;">
+      <div style="font-size:13px;"><b>#${sale.receipt_no}</b> · ${sale.created_at.slice(0,16).replace('T',' ')} · ${cust?cust.name:t('walkIn')}</div>
+      ${anyRemaining? `<button class="btn btn-danger btn-sm" onclick="Pages.doFullReturn()">↺ ${t('returnFullReceipt')}</button>` : ''}
     </div>
     <table><thead><tr><th>${t('partName')}</th><th>${t('qty')}</th><th>${t('price')}</th><th>${t('returnQty')}</th><th></th></tr></thead><tbody>
     ${(sale.sale_items||[]).map(it=>{
@@ -933,6 +937,30 @@ Pages.findSaleForReturn = ()=>{
     </tbody></table>
     <div class="field" style="margin-top:10px;"><label>${t('reason')}</label><input id="ret-reason" placeholder=""></div>
   `;
+};
+Pages.doFullReturn = async()=>{
+  const t=I18N.t.bind(I18N);
+  const sale = Pages._returnSale; if(!sale) return;
+  if(!confirm(t('confirmFullReturn'))) return;
+  const alreadyReturnedByItem = {};
+  Data.returns.filter(r=>r.sale_id===sale.id).forEach(r=>{ alreadyReturnedByItem[r.sale_item_id] = (alreadyReturnedByItem[r.sale_item_id]||0) + Number(r.qty); });
+  const reason = document.getElementById('ret-reason')?.value.trim() || t('returnFullReceipt');
+  for(const item of (sale.sale_items||[])){
+    const already = alreadyReturnedByItem[item.id]||0;
+    const remaining = Number(item.qty) - already;
+    if(remaining<=0) continue;
+    const refund_amount = remaining * Number(item.price);
+    const {error: retErr} = await sb.from('returns').insert({
+      sale_id: sale.id, sale_item_id: item.id, part_id: item.part_id, part_name: item.name,
+      qty: remaining, refund_amount, reason, staff_id: Auth.current.id
+    });
+    if(retErr){ showToast(retErr.message); return; }
+    const part = Data.parts.find(p=>p.id===item.part_id);
+    if(part){ await sb.from('parts').update({stock: Number(part.stock)+remaining}).eq('id', item.part_id); }
+  }
+  showToast(t('returnDone'));
+  await Data.refreshAll();
+  Router.render();
 };
 Pages.doReturn = async(saleItemId, remaining)=>{
   const t=I18N.t.bind(I18N);
