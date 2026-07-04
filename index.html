@@ -605,7 +605,7 @@ Pages.pos = ()=>{
   const custOptions = `<option value="">${t('walkIn')}</option>` + Data.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   return `${Pages.topbar('pos')}<div class="pos-wrap">
   <div class="card"><h3>${t('inventory')}</h3>
-    <input id="pos-search" placeholder="${t('searchPart')}" style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);margin-bottom:12px;" oninput="Pages.renderPosParts()">
+    <input id="pos-search" placeholder="${t('searchPart')}" style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);margin-bottom:12px;" oninput="Pages.refreshPosParts()">
     <div id="pos-parts">${Pages.renderPosParts()}</div>
   </div>
   <div class="card"><h3>${t('cart')}</h3>
@@ -647,6 +647,7 @@ Pages.deleteSale = async(id)=>{
   if(error){ showToast(error.message); return; }
   showToast(t('deleted')); await Data.refreshAll(); Router.render();
 };
+Pages.refreshPosParts = ()=>{ document.getElementById('pos-parts').innerHTML = Pages.renderPosParts(); };
 Pages.renderPosParts = ()=>{
   const t=I18N.t.bind(I18N); const q=(document.getElementById('pos-search')?.value||'').toLowerCase();
   const parts = Data.parts.filter(p=>Number(p.stock)>0 && (!q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)));
@@ -663,7 +664,9 @@ Pages.addToCart = (partId)=>{
 Pages.renderCart = ()=>{
   const t=I18N.t.bind(I18N); let subtotal=0;
   let rows = Pages._cart.map((c,i)=>{ subtotal += c.qty*c.price;
-    return `<div class="cart-line"><div class="cn">${c.name}</div><input type="number" min="1" value="${c.qty}" onchange="Pages.updateCartQty(${i}, this.value)">
+    return `<div class="cart-line"><div class="cn">${c.name}</div>
+    <input type="number" min="1" value="${c.qty}" title="${t('qty')}" onchange="Pages.updateCartQty(${i}, this.value)">
+    <input type="number" min="0" step="0.01" value="${c.price}" title="${t('sellPrice')}" style="width:72px;" onchange="Pages.updateCartPrice(${i}, this.value)">
     <div class="tabular" style="width:70px;text-align:right;">${money(c.qty*c.price)}</div><button class="close-x" onclick="Pages.removeCartItem(${i})">✕</button></div>`; }).join('');
   if(!Pages._cart.length) rows = `<div class="muted" style="padding:10px 0;">${t('cartEmptyMsg')}</div>`;
   const discount = parseFloat(document.getElementById('pos-discount')?.value)||0;
@@ -672,6 +675,7 @@ Pages.renderCart = ()=>{
   return rows;
 };
 Pages.updateCartQty = (i,val)=>{ const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId); let q=parseInt(val)||1; if(p&&q>Number(p.stock)) q=Number(p.stock); c.qty=Math.max(1,q); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
+Pages.updateCartPrice = (i,val)=>{ const c=Pages._cart[i]; let pr=parseFloat(val); if(isNaN(pr)||pr<0) pr=0; c.price=pr; document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.removeCartItem = (i)=>{ Pages._cart.splice(i,1); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.checkout = async()=>{
   const t=I18N.t.bind(I18N);
