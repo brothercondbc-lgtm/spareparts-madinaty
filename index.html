@@ -190,6 +190,14 @@ en:{
   accessDenied:"You don't have access to this section.", shopAddress:"New Cairo, Madinaty, Egypt", currency:"EGP",
   categoryPh:"e.g. Compressor, Filter, Coil...", skuPh:"e.g. AC-COMP-014", loading:"Loading...",
   addStaffHint:"To add a new staff member, create their account in the Supabase dashboard (Authentication → Users) with an email and password. They'll appear here automatically — set their role below.",
+  returns:"Returns", findSale:"Find sale by receipt number", receiptSearch:"Enter receipt number...",
+  findReceipt:"Find", saleNotFound:"No sale found with that receipt number.", returnQty:"Qty to return",
+  alreadyReturned:"already returned", maxReturnable:"Max returnable", refundAmount:"Refund amount",
+  reason:"Reason (optional)", processReturn:"Process return", returnDone:"Return processed — stock restored.",
+  returnHistory:"Return history", totalReturns:"Total returns", netRevenue:"Net revenue (after returns)",
+  soldItems:"Items in this sale", selectItemToReturn:"Select item to return", invalidReturnQty:"Enter a valid quantity to return.",
+  confirmDeletePurchase:"Delete this purchase? The quantities it added will be removed from inventory again.",
+  confirmDeleteSale:"Delete this sale? Its items will be added back to inventory (minus any already returned).",
 },
 ar:{
   appName:"نظام قطع الغيار", branch:"فرع مدينتي",
@@ -224,6 +232,14 @@ ar:{
   accessDenied:"ليس لديك صلاحية الوصول لهذا القسم.", shopAddress:"مدينتي، القاهرة الجديدة، مصر", currency:"جنيه",
   categoryPh:"مثال: كمبروسر، فلتر، مواسير...", skuPh:"مثال: AC-COMP-014", loading:"جارِ التحميل...",
   addStaffHint:"لإضافة موظف جديد، أنشئ حسابه من لوحة تحكم Supabase (Authentication → Users) ببريد إلكتروني وكلمة مرور. سيظهر هنا تلقائياً — حدد صلاحيته أدناه.",
+  returns:"المرتجعات", findSale:"ابحث عن عملية البيع برقم الإيصال", receiptSearch:"أدخل رقم الإيصال...",
+  findReceipt:"بحث", saleNotFound:"لا توجد عملية بيع بهذا الرقم.", returnQty:"الكمية المرتجعة",
+  alreadyReturned:"تم إرجاعه مسبقاً", maxReturnable:"الحد الأقصى للإرجاع", refundAmount:"مبلغ الاسترداد",
+  reason:"السبب (اختياري)", processReturn:"تنفيذ الإرجاع", returnDone:"تم تنفيذ الإرجاع — تمت إضافة الكمية للمخزون.",
+  returnHistory:"سجل المرتجعات", totalReturns:"إجمالي المرتجعات", netRevenue:"صافي المبيعات (بعد المرتجعات)",
+  soldItems:"الأصناف في هذه العملية", selectItemToReturn:"اختر الصنف المراد إرجاعه", invalidReturnQty:"أدخل كمية صحيحة للإرجاع.",
+  confirmDeletePurchase:"هل تريد حذف عملية الشراء هذه؟ سيتم خصم الكميات التي أضافتها من المخزون مرة أخرى.",
+  confirmDeleteSale:"هل تريد حذف عملية البيع هذه؟ سيتم إعادة أصنافها إلى المخزون (بعد خصم ما تم إرجاعه مسبقاً إن وجد).",
 }
 };
 const I18N = {
@@ -262,9 +278,9 @@ function showToast(msg){ const el=document.getElementById('toast'); el.textConte
    DATA CACHE (fetched from Supabase, refreshed after each change)
 ============================================================ */
 const Data = {
-  parts:[], suppliers:[], customers:[], purchases:[], sales:[], expenses:[], profiles:[],
+  parts:[], suppliers:[], customers:[], purchases:[], sales:[], expenses:[], profiles:[], returns:[],
   async refreshAll(){
-    const [parts, suppliers, customers, purchases, sales, expenses, profiles] = await Promise.all([
+    const [parts, suppliers, customers, purchases, sales, expenses, profiles, returns] = await Promise.all([
       sb.from('parts').select('*').order('name'),
       sb.from('suppliers').select('*').order('name'),
       sb.from('customers').select('*').order('name'),
@@ -272,9 +288,11 @@ const Data = {
       sb.from('sales').select('*, sale_items(*)').order('created_at', {ascending:false}),
       sb.from('expenses').select('*').order('date', {ascending:false}),
       sb.from('profiles').select('*'),
+      sb.from('returns').select('*').order('created_at', {ascending:false}),
     ]);
     this.parts = parts.data||[]; this.suppliers = suppliers.data||[]; this.customers = customers.data||[];
     this.purchases = purchases.data||[]; this.sales = sales.data||[]; this.expenses = expenses.data||[]; this.profiles = profiles.data||[];
+    this.returns = returns.data||[];
   }
 };
 
@@ -337,7 +355,8 @@ const Modal = {
 const NAV_ITEMS = [
   {key:'dashboard', icon:'◆', adminOnly:false}, {key:'inventory', icon:'▣', adminOnly:false},
   {key:'suppliers', icon:'⇄', adminOnly:false}, {key:'purchases', icon:'⇩', adminOnly:false},
-  {key:'pos', icon:'🛒', adminOnly:false}, {key:'customers', icon:'☺', adminOnly:false},
+  {key:'pos', icon:'🛒', adminOnly:false}, {key:'returns', icon:'↺', adminOnly:false},
+  {key:'customers', icon:'☺', adminOnly:false},
   {key:'finance', icon:'▤', adminOnly:true}, {key:'staff', icon:'⚙', adminOnly:true},
 ];
 const Router = {
@@ -354,7 +373,7 @@ const Router = {
     const item = NAV_ITEMS.find(n=>n.key===this.active);
     const page = (!item.adminOnly || Auth.isAdmin()) ? this.active : 'dashboard';
     this.active = page;
-    const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
+    const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, returns:Pages.returns, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
     document.getElementById('main').innerHTML = renderers[page]();
   }
 };
@@ -528,10 +547,23 @@ Pages.purchases = ()=>{
     <button class="btn btn-accent" style="margin-top:10px; margin-inline-start:8px;" onclick="Pages.savePurchase()">${t('recordPurchase')}</button>
   </div>
   <div class="card"><h3>${t('purchaseList')}</h3>
-    ${purchases.length? `<table><thead><tr><th>${t('date')}</th><th>${t('supplier')}</th><th>${t('total')}</th></tr></thead><tbody>
-    ${purchases.map(p=>{ const s=suppliers.find(x=>x.id===p.supplier_id); return `<tr><td>${p.created_at.slice(0,16).replace('T',' ')}</td><td>${s?s.name:'—'}</td><td class="tabular">${money(p.total)}</td></tr>`; }).join('')}
+    ${purchases.length? `<table><thead><tr><th>${t('date')}</th><th>${t('supplier')}</th><th>${t('total')}</th><th>${t('actions')}</th></tr></thead><tbody>
+    ${purchases.map(p=>{ const s=suppliers.find(x=>x.id===p.supplier_id); return `<tr><td>${p.created_at.slice(0,16).replace('T',' ')}</td><td>${s?s.name:'—'}</td><td class="tabular">${money(p.total)}</td><td><button class="btn btn-danger btn-sm" onclick="Pages.deletePurchase('${p.id}')">${t('delete')}</button></td></tr>`; }).join('')}
     </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
   </div>`;
+};
+Pages.deletePurchase = async(id)=>{
+  const t=I18N.t.bind(I18N);
+  if(!confirm(t('confirmDeletePurchase'))) return;
+  const purchase = Data.purchases.find(p=>p.id===id);
+  if(!purchase){ return; }
+  for(const it of (purchase.purchase_items||[])){
+    const part = Data.parts.find(p=>p.id===it.part_id);
+    if(part){ await sb.from('parts').update({stock: Number(part.stock)-Number(it.qty)}).eq('id', it.part_id); }
+  }
+  const {error} = await sb.from('purchases').delete().eq('id', id);
+  if(error){ showToast(error.message); return; }
+  showToast(t('deleted')); await Data.refreshAll(); Router.render();
 };
 Pages.renderPurchaseCart = ()=>{
   const t=I18N.t.bind(I18N); const parts=Data.parts;
@@ -583,7 +615,37 @@ Pages.pos = ()=>{
     <div id="pos-totals"></div>
     <div class="field"><label>${t('paid')}</label><input id="pos-paid" type="number" min="0" step="0.01" placeholder="0.00"></div>
     <button class="btn btn-accent btn-block" onclick="Pages.checkout()">${t('checkout')}</button>
-  </div></div>`;
+  </div></div>
+  <div class="card" style="margin-top:18px;">
+    <h3>${t('recentSales')}</h3>
+    ${Pages.renderSalesHistoryTable()}
+  </div>`;
+};
+Pages.renderSalesHistoryTable = ()=>{
+  const t=I18N.t.bind(I18N);
+  const sales = Data.sales.slice(0,15);
+  if(!sales.length) return `<div class="empty-state">${t('noData')}</div>`;
+  return `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('total')}</th><th>${t('actions')}</th></tr></thead><tbody>
+    ${sales.map(s=>`<tr><td>#${s.receipt_no}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td class="tabular">${money(s.total)}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="Pages.deleteSale('${s.id}')">${t('delete')}</button></td></tr>`).join('')}
+  </tbody></table>`;
+};
+Pages.deleteSale = async(id)=>{
+  const t=I18N.t.bind(I18N);
+  if(!confirm(t('confirmDeleteSale'))) return;
+  const sale = Data.sales.find(s=>s.id===id);
+  if(!sale){ return; }
+  for(const it of (sale.sale_items||[])){
+    const alreadyReturned = Data.returns.filter(r=>r.sale_item_id===it.id).reduce((a,r)=>a+Number(r.qty),0);
+    const restoreQty = Number(it.qty) - alreadyReturned;
+    if(restoreQty>0){
+      const part = Data.parts.find(p=>p.id===it.part_id);
+      if(part){ await sb.from('parts').update({stock: Number(part.stock)+restoreQty}).eq('id', it.part_id); }
+    }
+  }
+  const {error} = await sb.from('sales').delete().eq('id', id);
+  if(error){ showToast(error.message); return; }
+  showToast(t('deleted')); await Data.refreshAll(); Router.render();
 };
 Pages.renderPosParts = ()=>{
   const t=I18N.t.bind(I18N); const q=(document.getElementById('pos-search')?.value||'').toLowerCase();
@@ -655,14 +717,85 @@ Pages.printReceipt = (sale)=>{
   setTimeout(()=>window.print(), 150);
 };
 
+/* ---- RETURNS ---- */
+Pages._returnSale = null;
+Pages.returns = ()=>{
+  const t=I18N.t.bind(I18N);
+  const recentReturns = Data.returns.slice(0,10);
+  return `${Pages.topbar('returns')}
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>${t('findSale')}</h3>
+      <div class="search-row"><input id="ret-receipt" placeholder="${t('receiptSearch')}"><button class="btn btn-primary" onclick="Pages.findSaleForReturn()">${t('findReceipt')}</button></div>
+      <div id="ret-sale-area"></div>
+    </div>
+    <div class="card">
+      <h3>${t('returnHistory')}</h3>
+      ${recentReturns.length? `<table><thead><tr><th>${t('date')}</th><th>${t('partName')}</th><th>${t('qty')}</th><th>${t('refundAmount')}</th></tr></thead><tbody>
+        ${recentReturns.map(r=>`<tr><td>${r.created_at.slice(0,16).replace('T',' ')}</td><td>${r.part_name||'—'}</td><td>${r.qty}</td><td class="tabular">${money(r.refund_amount)}</td></tr>`).join('')}
+      </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}
+    </div>
+  </div>`;
+};
+Pages.findSaleForReturn = ()=>{
+  const t=I18N.t.bind(I18N);
+  const receipt = document.getElementById('ret-receipt').value.trim().replace(/^#/,'');
+  const sale = Data.sales.find(s=>s.receipt_no===receipt || s.receipt_no===receipt.padStart(5,'0'));
+  const area = document.getElementById('ret-sale-area');
+  if(!sale){ area.innerHTML = `<div class="muted" style="padding:10px 0;">${t('saleNotFound')}</div>`; return; }
+  Pages._returnSale = sale;
+  const cust = Data.customers.find(c=>c.id===sale.customer_id);
+  const alreadyReturnedByItem = {};
+  Data.returns.filter(r=>r.sale_id===sale.id).forEach(r=>{ alreadyReturnedByItem[r.sale_item_id] = (alreadyReturnedByItem[r.sale_item_id]||0) + Number(r.qty); });
+  area.innerHTML = `
+    <div style="margin:12px 0;font-size:13px;">
+      <b>#${sale.receipt_no}</b> · ${sale.created_at.slice(0,16).replace('T',' ')} · ${cust?cust.name:t('walkIn')}
+    </div>
+    <table><thead><tr><th>${t('partName')}</th><th>${t('qty')}</th><th>${t('price')}</th><th>${t('returnQty')}</th><th></th></tr></thead><tbody>
+    ${(sale.sale_items||[]).map(it=>{
+      const already = alreadyReturnedByItem[it.id]||0;
+      const remaining = Number(it.qty) - already;
+      return `<tr>
+        <td>${it.name}</td><td>${it.qty}</td><td class="tabular">${money(it.price)}</td>
+        <td><input type="number" min="0" max="${remaining}" value="0" style="width:70px;" id="ret-qty-${it.id}"></td>
+        <td>${remaining<=0? `<span class="muted">${t('alreadyReturned')}</span>` : `<button class="btn btn-outline btn-sm" onclick="Pages.doReturn('${it.id}', ${remaining})">${t('processReturn')}</button>`}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>
+    <div class="field" style="margin-top:10px;"><label>${t('reason')}</label><input id="ret-reason" placeholder=""></div>
+  `;
+};
+Pages.doReturn = async(saleItemId, remaining)=>{
+  const t=I18N.t.bind(I18N);
+  const sale = Pages._returnSale;
+  const item = (sale.sale_items||[]).find(it=>it.id===saleItemId);
+  const qty = parseFloat(document.getElementById(`ret-qty-${saleItemId}`).value);
+  if(!qty || qty<=0 || qty>remaining){ showToast(t('invalidReturnQty')); return; }
+  const refund_amount = qty * Number(item.price);
+  const reason = document.getElementById('ret-reason').value.trim();
+  const {error: retErr} = await sb.from('returns').insert({
+    sale_id: sale.id, sale_item_id: item.id, part_id: item.part_id, part_name: item.name,
+    qty, refund_amount, reason, staff_id: Auth.current.id
+  });
+  if(retErr){ showToast(retErr.message); return; }
+  const part = Data.parts.find(p=>p.id===item.part_id);
+  if(part){ await sb.from('parts').update({stock: Number(part.stock)+qty}).eq('id', part.id); }
+  showToast(t('returnDone'));
+  await Data.refreshAll();
+  Router.render();
+};
+
 /* ---- FINANCE ---- */
 Pages.finance = ()=>{
   const t=I18N.t.bind(I18N);
   if(!Auth.isAdmin()) return `${Pages.topbar('finance')}<div class="card"><div class="empty-state">${t('accessDenied')}</div></div>`;
-  const sales=Data.sales, expenses=Data.expenses, parts=Data.parts;
+  const sales=Data.sales, expenses=Data.expenses, parts=Data.parts, returns=Data.returns;
   const revenue = sales.reduce((a,s)=>a+Number(s.total),0);
+  const totalReturns = returns.reduce((a,r)=>a+Number(r.refund_amount),0);
+  const netRevenue = revenue - totalReturns;
   const cogs = sales.reduce((a,s)=>a + (s.sale_items||[]).reduce((b,it)=>b+Number(it.qty)*Number(it.cost),0), 0);
-  const grossProfit = revenue - cogs;
+  const returnedCogs = returns.reduce((a,r)=>{ const p=parts.find(x=>x.id===r.part_id); return a + Number(r.qty)*(p?Number(p.cost_price):0); },0);
+  const grossProfit = netRevenue - (cogs - returnedCogs);
   const otherExp = expenses.reduce((a,e)=>a+Number(e.amount),0);
   const netProfit = grossProfit - otherExp;
   const invValue = parts.reduce((a,p)=>a+Number(p.stock)*Number(p.cost_price),0);
@@ -670,6 +803,8 @@ Pages.finance = ()=>{
   return `${Pages.topbar('finance')}
   <div class="grid grid-3">
     <div class="stat-card success"><div class="stat-label">${t('revenue')}</div><div class="stat-value tabular">${money(revenue)}</div></div>
+    <div class="stat-card danger"><div class="stat-label">${t('totalReturns')}</div><div class="stat-value tabular">${money(totalReturns)}</div></div>
+    <div class="stat-card success"><div class="stat-label">${t('netRevenue')}</div><div class="stat-value tabular">${money(netRevenue)}</div></div>
     <div class="stat-card"><div class="stat-label">${t('cogs')}</div><div class="stat-value tabular">${money(cogs)}</div></div>
     <div class="stat-card"><div class="stat-label">${t('grossProfit')}</div><div class="stat-value tabular">${money(grossProfit)}</div></div>
     <div class="stat-card danger"><div class="stat-label">${t('otherExpenses')}</div><div class="stat-value tabular">${money(otherExp)}</div></div>
