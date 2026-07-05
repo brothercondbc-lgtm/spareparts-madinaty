@@ -630,19 +630,38 @@ Pages.deletePurchase = async(id)=>{
   showToast(t('deleted')); await Data.refreshAll(); Router.render();
 };
 Pages.renderPurchaseCart = ()=>{
-  const t=I18N.t.bind(I18N); const parts=Data.parts;
+  const t=I18N.t.bind(I18N);
   if(!Pages._purchaseCart.length) return `<div class="muted" style="padding:10px 0;">${t('cartEmptyMsg')}</div>`;
   return Pages._purchaseCart.map((row,i)=>{
-    const options = parts.map(p=>`<option value="${p.id}" ${row.partId===p.id?'selected':''}>${p.name}</option>`).join('');
-    return `<div class="cart-line"><select class="cn" onchange="Pages.updatePurchaseRow(${i},'partId',this.value)"><option value="">—</option>${options}</select>
-      <input type="text" inputmode="decimal" value="${row.qty}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
-      <input type="text" inputmode="decimal" placeholder="${t('costPrice')}" value="${row.cost}" onchange="Pages.updatePurchaseRow(${i},'cost',this.value)">
+    const selected = row.partId ? Data.parts.find(p=>p.id===row.partId) : null;
+    return `<div class="cart-line">
+      <div style="position:relative;flex:1;">
+        <input type="text" class="cn" placeholder="${t('searchPart')}" value="${selected?selected.name.replace(/"/g,'&quot;'):''}" autocomplete="off"
+          oninput="Pages.filterPurchasePartSuggestions(${i}, this.value)" onfocus="Pages.filterPurchasePartSuggestions(${i}, this.value)"
+          onblur="setTimeout(()=>{const b=document.getElementById('pu-suggest-${i}'); if(b) b.style.display='none';},150)">
+        <div id="pu-suggest-${i}" style="display:none;position:absolute;z-index:20;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;width:100%;box-shadow:var(--shadow);"></div>
+      </div>
+      <input type="text" inputmode="decimal" value="${row.qty}" style="width:60px;" title="${t('qty')}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
+      <input type="text" inputmode="decimal" placeholder="${t('costPrice')}" value="${row.cost}" style="width:70px;" onchange="Pages.updatePurchaseRow(${i},'cost',this.value)">
       <button class="close-x" onclick="Pages.removePurchaseRow(${i})">✕</button></div>`;
   }).join('');
 };
+Pages.filterPurchasePartSuggestions = (i, query)=>{
+  const t=I18N.t.bind(I18N);
+  const box = document.getElementById(`pu-suggest-${i}`); if(!box) return;
+  const q = (query||'').trim().toLowerCase();
+  const matches = Data.parts.filter(p=>!q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,8);
+  box.innerHTML = matches.length ? matches.map(p=>`<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;" onmousedown="Pages.selectPurchasePart(${i}, '${p.id}')">${p.name}${p.sku?` · ${p.sku}`:''}</div>`).join('') : `<div class="muted" style="padding:8px 10px;">${t('noData')}</div>`;
+  box.style.display = 'block';
+};
+Pages.selectPurchasePart = (i, partId)=>{
+  Pages._purchaseCart[i].partId = partId;
+  const p = Data.parts.find(x=>x.id===partId);
+  if(p){ Pages._purchaseCart[i].cost = p.cost_price; }
+  document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart();
+};
 Pages.addPurchaseItem = ()=>{ Pages._purchaseCart.push({partId:'', qty:1, cost:0}); document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); };
-Pages.updatePurchaseRow = (i,field,val)=>{ Pages._purchaseCart[i][field]= field==='partId'?val:toNum(val)||0;
-  if(field==='partId'){ const p=Data.parts.find(x=>x.id===val); if(p){ Pages._purchaseCart[i].cost = p.cost_price; } document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); } };
+Pages.updatePurchaseRow = (i,field,val)=>{ Pages._purchaseCart[i][field] = toNum(val)||0; };
 Pages.removePurchaseRow = (i)=>{ Pages._purchaseCart.splice(i,1); document.getElementById('pu-cart').innerHTML = Pages.renderPurchaseCart(); };
 Pages.savePurchase = async()=>{
   const t=I18N.t.bind(I18N);
