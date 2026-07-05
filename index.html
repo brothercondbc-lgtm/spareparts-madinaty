@@ -223,6 +223,7 @@ en:{
   receipts:"Receipts", searchReceipts:"Search by receipt number or customer name...", print:"Print",
   servedBy:"Served by", noSalesYet:"No sales recorded yet.",
   returnFullReceipt:"Return entire receipt", confirmFullReturn:"Return every remaining item on this receipt? This restores all of it to inventory.",
+  paymentMethod:"Payment method", cash:"Cash", visa:"Visa", instapay:"InstaPay", note:"Note", noteOptional:"Optional note about this sale...",
 },
 ar:{
   appName:"نظام قطع الغيار", branch:"فرع مدينتي",
@@ -268,6 +269,7 @@ ar:{
   receipts:"الإيصالات", searchReceipts:"ابحث برقم الإيصال أو اسم العميل...", print:"طباعة",
   servedBy:"باعه", noSalesYet:"لا توجد عمليات بيع مسجلة بعد.",
   returnFullReceipt:"إرجاع الإيصال بالكامل", confirmFullReturn:"هل تريد إرجاع كل الأصناف المتبقية في هذا الإيصال؟ سيتم إعادتها جميعاً إلى المخزون.",
+  paymentMethod:"طريقة الدفع", cash:"نقداً", visa:"فيزا", instapay:"إنستاباي", note:"ملاحظة", noteOptional:"ملاحظة اختيارية عن عملية البيع...",
 }
 };
 const I18N = {
@@ -705,6 +707,12 @@ Pages.pos = ()=>{
     <div class="field" style="margin-top:10px;"><label>${t('discount')} (${t('currency')})</label><input id="pos-discount" type="text" inputmode="decimal" value="0" oninput="Pages.renderCart()"></div>
     <div id="pos-totals"></div>
     <div class="field"><label>${t('paid')}</label><input id="pos-paid" type="text" inputmode="decimal" placeholder="0.00"></div>
+    <div class="field"><label>${t('paymentMethod')}</label><select id="pos-payment-method">
+      <option value="cash">${t('cash')}</option>
+      <option value="visa">${t('visa')}</option>
+      <option value="instapay">${t('instapay')}</option>
+    </select></div>
+    <div class="field"><label>${t('note')}</label><textarea id="pos-note" rows="2" placeholder="${t('noteOptional')}"></textarea></div>
     <button class="btn btn-accent btn-block" onclick="Pages.checkout()">${t('checkout')}</button>
   </div></div>
   <div class="card" style="margin-top:18px;">
@@ -803,9 +811,12 @@ Pages.checkout = async()=>{
   const receipt_no = (Data.sales.length+1).toString().padStart(5,'0');
   const chosenDate = document.getElementById('pos-date').value || todayStr();
   const saleDate = combineDateWithNow(chosenDate);
+  const payment_method = document.getElementById('pos-payment-method').value;
+  const note = document.getElementById('pos-note').value.trim();
   const {data: sale, error} = await sb.from('sales').insert({
     receipt_no, customer_id: document.getElementById('pos-customer').value || null,
-    subtotal, discount, total:grand, paid, change: paid-grand, staff_id:Auth.current.id, created_at: saleDate
+    subtotal, discount, total:grand, paid, change: paid-grand, staff_id:Auth.current.id, created_at: saleDate,
+    payment_method, note
   }).select().single();
   if(error){ showToast(error.message); return; }
   const itemRows = Pages._cart.map(c=>({sale_id:sale.id, part_id:c.partId, name:c.name, qty:c.qty, price:c.price, cost:c.cost}));
@@ -814,10 +825,12 @@ Pages.checkout = async()=>{
   Pages.printReceipt({...sale, items:Pages._cart});
   Pages._cart = [];
   document.getElementById('pos-paid').value=''; document.getElementById('pos-discount').value='0';
+  document.getElementById('pos-note').value=''; document.getElementById('pos-payment-method').value='cash';
   showToast(t('saleDone')); await Data.refreshAll(); Router.render();
 };
-Pages.buildReceiptHtml = ({receiptNo, dateStr, customerName, items, subtotal, discount, total, paid, change, staffName})=>{
+Pages.buildReceiptHtml = ({receiptNo, dateStr, customerName, items, subtotal, discount, total, paid, change, staffName, paymentMethod, note})=>{
   const t=I18N.t.bind(I18N);
+  const pmLabel = paymentMethod==='visa'?t('visa') : paymentMethod==='instapay'?t('instapay') : t('cash');
   return `
   <div class="rc-doc">
     <div class="rc-letterhead" style="direction:ltr; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
@@ -835,6 +848,7 @@ Pages.buildReceiptHtml = ({receiptNo, dateStr, customerName, items, subtotal, di
       <div>
         <div><span class="label">${t('receiptNo')}:</span> <b>#${receiptNo}</b></div>
         <div><span class="label">${t('date')}:</span> ${dateStr}</div>
+        <div><span class="label">${t('paymentMethod')}:</span> ${pmLabel}</div>
       </div>
       <div style="text-align:right;">
         <div><span class="label">${t('selectCustomer')}:</span> ${customerName}</div>
@@ -855,6 +869,7 @@ Pages.buildReceiptHtml = ({receiptNo, dateStr, customerName, items, subtotal, di
     <div style="text-align:center;margin-top:10px;">
       <span style="display:inline-block;border:2px solid #2E7D5B;color:#2E7D5B;font-weight:800;font-size:13px;letter-spacing:2px;padding:4px 18px;border-radius:4px;text-transform:uppercase;">${t('paid')}</span>
     </div>
+    ${note? `<div style="margin-top:12px;font-size:11px;color:#333;"><b>${t('note')}:</b> ${note}</div>` : ''}
     <div class="rc-thanks">${t('thankYou')}</div>
     <div class="rc-footer"><span>Brother Cond For Air Conditioning</span><span>${t('receiptNo')} #${receiptNo}</span></div>
   </div>`;
@@ -866,7 +881,8 @@ Pages.printReceipt = (sale)=>{
     receiptNo: sale.receipt_no, dateStr: (sale.created_at||new Date().toISOString()).slice(0,16).replace('T',' '),
     customerName: cust?cust.name:t('walkIn'), items: sale.items,
     subtotal: sale.subtotal, discount: sale.discount, total: sale.total, paid: sale.paid, change: sale.change,
-    staffName: Auth.current.full_name||Auth.current.email
+    staffName: Auth.current.full_name||Auth.current.email,
+    paymentMethod: sale.payment_method, note: sale.note
   });
   document.getElementById('receipt-print').innerHTML = html;
   setTimeout(()=>window.print(), 150);
@@ -881,7 +897,8 @@ Pages.reprintSale = (id)=>{
     customerName: cust?cust.name:t('walkIn'),
     items: (sale.sale_items||[]).map(it=>({name:it.name, qty:it.qty, price:it.price})),
     subtotal: sale.subtotal, discount: sale.discount, total: sale.total, paid: sale.paid, change: sale.change,
-    staffName: staffProfile ? (staffProfile.full_name||staffProfile.email) : '—'
+    staffName: staffProfile ? (staffProfile.full_name||staffProfile.email) : '—',
+    paymentMethod: sale.payment_method, note: sale.note
   });
   document.getElementById('receipt-print').innerHTML = html;
   setTimeout(()=>window.print(), 150);
@@ -908,12 +925,13 @@ Pages.refreshReceiptsTable = ()=>{
 Pages.renderReceiptsTable = (sales)=>{
   const t=I18N.t.bind(I18N);
   if(!sales.length) return `<div class="empty-state">${t('noSalesYet')}</div>`;
-  return `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('selectCustomer')}</th><th>${t('total')}</th><th>${t('servedBy')}</th><th>${t('actions')}</th></tr></thead><tbody>
+  const pmLabel = pm=> pm==='visa'?t('visa') : pm==='instapay'?t('instapay') : t('cash');
+  return `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('selectCustomer')}</th><th>${t('total')}</th><th>${t('paymentMethod')}</th><th>${t('servedBy')}</th><th>${t('actions')}</th></tr></thead><tbody>
   ${sales.map(s=>{
     const cust = Data.customers.find(c=>c.id===s.customer_id);
     const staffProfile = Data.profiles.find(p=>p.id===s.staff_id);
     return `<tr><td>#${s.receipt_no}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td>${cust?cust.name:t('walkIn')}</td>
-    <td class="tabular">${money(s.total)}</td><td>${staffProfile?(staffProfile.full_name||staffProfile.email):'—'}</td>
+    <td class="tabular">${money(s.total)}</td><td>${pmLabel(s.payment_method)}</td><td>${staffProfile?(staffProfile.full_name||staffProfile.email):'—'}</td>
     <td><button class="btn btn-outline btn-sm" onclick="Pages.reprintSale('${s.id}')">🖨 ${t('print')}</button></td></tr>`;
   }).join('')}
   </tbody></table>`;
