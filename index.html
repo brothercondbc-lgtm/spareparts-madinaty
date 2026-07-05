@@ -311,6 +311,13 @@ function normalizeDigits(str){
 function toNum(v){ return parseFloat(normalizeDigits(v)); }
 function toInt(v){ return parseInt(normalizeDigits(v)); }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
+function combineDateWithNow(dateStr){
+  const now = new Date();
+  const parts = String(dateStr||'').split('-').map(n=>parseInt(n));
+  if(parts.length!==3 || parts.some(isNaN)) return now.toISOString();
+  const dt = new Date(parts[0], parts[1]-1, parts[2], now.getHours(), now.getMinutes(), now.getSeconds());
+  return dt.toISOString();
+}
 function showToast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(window.__tt); window.__tt=setTimeout(()=>el.classList.remove('show'),2200); }
 
 /* ============================================================
@@ -598,6 +605,7 @@ Pages.purchases = ()=>{
   return `${Pages.topbar('purchases')}<div class="grid grid-2">
   <div class="card"><h3>${t('recordPurchase')}</h3>
     <div class="field"><label>${t('supplier')}</label><select id="pu-supplier">${supOptions}</select></div>
+    <div class="field"><label>${t('date')}</label><input type="date" id="pu-date" value="${todayStr()}"></div>
     <div id="pu-cart">${Pages.renderPurchaseCart()}</div>
     <button class="btn btn-primary" style="margin-top:10px;" onclick="Pages.addPurchaseItem()">+ ${t('addItem')}</button>
     <button class="btn btn-accent" style="margin-top:10px; margin-inline-start:8px;" onclick="Pages.savePurchase()">${t('recordPurchase')}</button>
@@ -639,10 +647,11 @@ Pages.removePurchaseRow = (i)=>{ Pages._purchaseCart.splice(i,1); document.getEl
 Pages.savePurchase = async()=>{
   const t=I18N.t.bind(I18N);
   const supplier_id = document.getElementById('pu-supplier').value || null;
+  const chosenDate = document.getElementById('pu-date').value || todayStr();
   const items = Pages._purchaseCart.filter(r=>r.partId && r.qty>0);
   if(!items.length){ showToast(t('requiredFields')); return; }
   const total = items.reduce((a,it)=>a+it.qty*it.cost,0);
-  const {data: purchase, error} = await sb.from('purchases').insert({supplier_id, total, staff_id:Auth.current.id}).select().single();
+  const {data: purchase, error} = await sb.from('purchases').insert({supplier_id, total, staff_id:Auth.current.id, created_at: combineDateWithNow(chosenDate)}).select().single();
   if(error){ showToast(error.message); return; }
   const itemRows = items.map(it=>({purchase_id:purchase.id, part_id:it.partId, qty:it.qty, cost:it.cost}));
   await sb.from('purchase_items').insert(itemRows);
@@ -672,6 +681,7 @@ Pages.pos = ()=>{
       <input type="hidden" id="pos-customer" value="">
       <div id="pos-customer-suggestions" style="display:none;position:absolute;z-index:20;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;width:100%;box-shadow:var(--shadow);"></div>
     </div>
+    <div class="field"><label>${t('date')}</label><input type="date" id="pos-date" value="${todayStr()}"></div>
     <div id="pos-cart">${Pages.renderCart()}</div>
     <div class="field" style="margin-top:10px;"><label>${t('discount')} (${t('currency')})</label><input id="pos-discount" type="text" inputmode="decimal" value="0" oninput="Pages.renderCart()"></div>
     <div id="pos-totals"></div>
@@ -772,9 +782,11 @@ Pages.checkout = async()=>{
   if(isNaN(paid) || paid < grand){ showToast(t('changeInvalid')); return; }
   for(const c of Pages._cart){ const p = Data.parts.find(x=>x.id===c.partId); if(!p || Number(p.stock) < c.qty){ showToast(t('insufficientStock')); return; } }
   const receipt_no = (Data.sales.length+1).toString().padStart(5,'0');
+  const chosenDate = document.getElementById('pos-date').value || todayStr();
+  const saleDate = combineDateWithNow(chosenDate);
   const {data: sale, error} = await sb.from('sales').insert({
     receipt_no, customer_id: document.getElementById('pos-customer').value || null,
-    subtotal, discount, total:grand, paid, change: paid-grand, staff_id:Auth.current.id
+    subtotal, discount, total:grand, paid, change: paid-grand, staff_id:Auth.current.id, created_at: saleDate
   }).select().single();
   if(error){ showToast(error.message); return; }
   const itemRows = Pages._cart.map(c=>({sale_id:sale.id, part_id:c.partId, name:c.name, qty:c.qty, price:c.price, cost:c.cost}));
@@ -832,7 +844,7 @@ Pages.printReceipt = (sale)=>{
   const cust = Data.customers.find(c=>c.id===sale.customer_id);
   const t=I18N.t.bind(I18N);
   const html = Pages.buildReceiptHtml({
-    receiptNo: sale.receipt_no, dateStr: new Date().toISOString().slice(0,16).replace('T',' '),
+    receiptNo: sale.receipt_no, dateStr: (sale.created_at||new Date().toISOString()).slice(0,16).replace('T',' '),
     customerName: cust?cust.name:t('walkIn'), items: sale.items,
     subtotal: sale.subtotal, discount: sale.discount, total: sale.total, paid: sale.paid, change: sale.change,
     staffName: Auth.current.full_name||Auth.current.email
