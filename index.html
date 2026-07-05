@@ -496,18 +496,18 @@ Pages.openPartModal = (id)=>{
     <div class="grid grid-3"><div class="field"><label>${t('costPrice')}</label><input id="pf-cost" type="text" inputmode="decimal" value="${p?p.cost_price:''}"></div>
     <div class="field"><label>${t('sellPrice')}</label><input id="pf-sell" type="text" inputmode="decimal" value="${p?p.sell_price:''}"></div>
     <div class="field"><label>${t('unit')}</label><input id="pf-unit" placeholder="pcs" value="${p?p.unit||'':''}"></div></div>
-    <div class="grid grid-2"><div class="field"><label>${t('stock')}</label><input id="pf-stock" type="text" inputmode="numeric" value="${p?p.stock:0}"></div>
-    <div class="field"><label>${t('reorderLevel')}</label><input id="pf-reorder" type="text" inputmode="numeric" value="${p?p.reorder_level:2}"></div></div>
+    <div class="grid grid-2"><div class="field"><label>${t('stock')}</label><input id="pf-stock" type="text" inputmode="decimal" value="${p?p.stock:0}"></div>
+    <div class="field"><label>${t('reorderLevel')}</label><input id="pf-reorder" type="text" inputmode="decimal" value="${p?p.reorder_level:2}"></div></div>
   `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.savePart('${p?p.id:''}')">${t('save')}</button>`);
 };
 Pages.savePart = async(id)=>{
   const t=I18N.t.bind(I18N);
   const name=document.getElementById('pf-name').value.trim();
-  const cost=toNum(document.getElementById('pf-cost').value), sell=toNum(document.getElementById('pf-sell').value), stock=toInt(document.getElementById('pf-stock').value);
+  const cost=toNum(document.getElementById('pf-cost').value), sell=toNum(document.getElementById('pf-sell').value), stock=toNum(document.getElementById('pf-stock').value);
   if(!name||isNaN(cost)||isNaN(sell)||isNaN(stock)){ showToast(t('requiredFields')); return; }
   const row = { name, sku:document.getElementById('pf-sku').value.trim(), category:document.getElementById('pf-cat').value.trim(),
     supplier_id: document.getElementById('pf-sup').value||null, cost_price:cost, sell_price:sell,
-    unit:document.getElementById('pf-unit').value.trim()||'pcs', stock, reorder_level:toInt(document.getElementById('pf-reorder').value)||0 };
+    unit:document.getElementById('pf-unit').value.trim()||'pcs', stock, reorder_level:toNum(document.getElementById('pf-reorder').value)||0 };
   const {error} = id ? await sb.from('parts').update(row).eq('id', id) : await sb.from('parts').insert(row);
   if(error){ showToast(error.message); return; }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
@@ -635,7 +635,7 @@ Pages.renderPurchaseCart = ()=>{
   return Pages._purchaseCart.map((row,i)=>{
     const options = parts.map(p=>`<option value="${p.id}" ${row.partId===p.id?'selected':''}>${p.name}</option>`).join('');
     return `<div class="cart-line"><select class="cn" onchange="Pages.updatePurchaseRow(${i},'partId',this.value)"><option value="">—</option>${options}</select>
-      <input type="text" inputmode="numeric" value="${row.qty}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
+      <input type="text" inputmode="decimal" value="${row.qty}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
       <input type="text" inputmode="decimal" placeholder="${t('costPrice')}" value="${row.cost}" onchange="Pages.updatePurchaseRow(${i},'cost',this.value)">
       <button class="close-x" onclick="Pages.removePurchaseRow(${i})">✕</button></div>`;
   }).join('');
@@ -760,7 +760,7 @@ Pages.renderCart = ()=>{
   const t=I18N.t.bind(I18N); let subtotal=0;
   let rows = Pages._cart.map((c,i)=>{ subtotal += c.qty*c.price;
     return `<div class="cart-line"><div class="cn">${c.name}</div>
-    <input type="text" inputmode="numeric" value="${c.qty}" title="${t('qty')}" onchange="Pages.updateCartQty(${i}, this.value)">
+    <input type="text" inputmode="decimal" value="${c.qty}" title="${t('qty')}" onchange="Pages.updateCartQty(${i}, this.value)">
     <input type="text" inputmode="decimal" value="${c.price}" title="${t('sellPrice')}" style="width:72px;" onchange="Pages.updateCartPrice(${i}, this.value)">
     <div class="tabular" style="width:70px;text-align:right;">${money(c.qty*c.price)}</div><button class="close-x" onclick="Pages.removeCartItem(${i})">✕</button></div>`; }).join('');
   if(!Pages._cart.length) rows = `<div class="muted" style="padding:10px 0;">${t('cartEmptyMsg')}</div>`;
@@ -769,7 +769,7 @@ Pages.renderCart = ()=>{
   setTimeout(()=>{ const tt=document.getElementById('pos-totals'); if(tt) tt.innerHTML = `<div class="cart-total-row"><span>${t('subtotal')}</span><span class="tabular">${money(subtotal)}</span></div><div class="cart-total-row grand"><span>${t('grandTotal')}</span><span class="tabular">${money(grand)} ${t('currency')}</span></div>`; },0);
   return rows;
 };
-Pages.updateCartQty = (i,val)=>{ const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId); let q=toInt(val)||1; if(p&&q>Number(p.stock)) q=Number(p.stock); c.qty=Math.max(1,q); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
+Pages.updateCartQty = (i,val)=>{ const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId); let q=toNum(val); if(isNaN(q)||q<=0) q=1; if(p&&q>Number(p.stock)) q=Number(p.stock); c.qty=q; document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.updateCartPrice = (i,val)=>{ const c=Pages._cart[i]; let pr=toNum(val); if(isNaN(pr)||pr<0) pr=0; c.price=pr; document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.removeCartItem = (i)=>{ Pages._cart.splice(i,1); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.checkout = async()=>{
