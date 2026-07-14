@@ -224,6 +224,8 @@ en:{
   servedBy:"Served by", noSalesYet:"No sales recorded yet.",
   returnFullReceipt:"Return entire receipt", confirmFullReturn:"Return every remaining item on this receipt? This restores all of it to inventory.",
   paymentMethod:"Payment method", cash:"Cash", visa:"Visa", instapay:"InstaPay", note:"Note", noteOptional:"Optional note about this sale...",
+  confirmTitle:"Please confirm", confirmYes:"Yes, continue",
+  fullyReturned:"Fully returned", partiallyReturned:"Partially returned",
 },
 ar:{
   appName:"نظام قطع الغيار", branch:"فرع مدينتي",
@@ -270,6 +272,8 @@ ar:{
   servedBy:"باعه", noSalesYet:"لا توجد عمليات بيع مسجلة بعد.",
   returnFullReceipt:"إرجاع الإيصال بالكامل", confirmFullReturn:"هل تريد إرجاع كل الأصناف المتبقية في هذا الإيصال؟ سيتم إعادتها جميعاً إلى المخزون.",
   paymentMethod:"طريقة الدفع", cash:"نقداً", visa:"فيزا", instapay:"إنستاباي", note:"ملاحظة", noteOptional:"ملاحظة اختيارية عن عملية البيع...",
+  confirmTitle:"تأكيد العملية", confirmYes:"نعم، متابعة",
+  fullyReturned:"مرتجع بالكامل", partiallyReturned:"مرتجع جزئياً",
 }
 };
 const I18N = {
@@ -396,6 +400,16 @@ const Modal = {
   },
   close(){ document.getElementById('modal-overlay').classList.remove('show'); }
 };
+const Confirm = {
+  _onYes: null,
+  ask(message, onYes){
+    const t = I18N.t.bind(I18N);
+    Confirm._onYes = onYes;
+    Modal.open(t('confirmTitle'), `<div style="font-size:14px;line-height:1.5;">${message}</div>`,
+      `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-danger" onclick="Confirm._yes()">${t('confirmYes')}</button>`);
+  },
+  _yes(){ const cb = Confirm._onYes; Confirm._onYes = null; Modal.close(); if(cb) cb(); }
+};
 
 /* ============================================================
    NAVIGATION
@@ -514,11 +528,13 @@ Pages.savePart = async(id)=>{
   if(error){ showToast(error.message); return; }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
 };
-Pages.deletePart = async(id)=>{
-  const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
-  const {error} = await sb.from('parts').delete().eq('id', id);
-  if(error){ showToast(error.message); return; }
-  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+Pages.deletePart = (id)=>{
+  const t=I18N.t.bind(I18N);
+  Confirm.ask(t('confirmDelete'), async()=>{
+    const {error} = await sb.from('parts').delete().eq('id', id);
+    if(error){ showToast(error.message); return; }
+    showToast(t('deleted')); await Data.refreshAll(); Router.render();
+  });
 };
 
 /* ---- SUPPLIERS ---- */
@@ -548,11 +564,13 @@ Pages.saveSupplier = async(id)=>{
   if(error){ showToast(error.message); return; }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
 };
-Pages.deleteSupplier = async(id)=>{
-  const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
-  const {error}=await sb.from('suppliers').delete().eq('id',id);
-  if(error){ showToast(error.message); return; }
-  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+Pages.deleteSupplier = (id)=>{
+  const t=I18N.t.bind(I18N);
+  Confirm.ask(t('confirmDelete'), async()=>{
+    const {error}=await sb.from('suppliers').delete().eq('id',id);
+    if(error){ showToast(error.message); return; }
+    showToast(t('deleted')); await Data.refreshAll(); Router.render();
+  });
 };
 
 /* ---- CUSTOMERS ---- */
@@ -592,11 +610,13 @@ Pages.saveCustomer = async(id)=>{
   }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
 };
-Pages.deleteCustomer = async(id)=>{
-  const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
-  const {error}=await sb.from('customers').delete().eq('id',id);
-  if(error){ showToast(error.message); return; }
-  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+Pages.deleteCustomer = (id)=>{
+  const t=I18N.t.bind(I18N);
+  Confirm.ask(t('confirmDelete'), async()=>{
+    const {error}=await sb.from('customers').delete().eq('id',id);
+    if(error){ showToast(error.message); return; }
+    showToast(t('deleted')); await Data.refreshAll(); Router.render();
+  });
 };
 
 /* ---- PURCHASES ---- */
@@ -618,18 +638,19 @@ Pages.purchases = ()=>{
     </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
   </div>`;
 };
-Pages.deletePurchase = async(id)=>{
+Pages.deletePurchase = (id)=>{
   const t=I18N.t.bind(I18N);
-  if(!confirm(t('confirmDeletePurchase'))) return;
-  const purchase = Data.purchases.find(p=>p.id===id);
-  if(!purchase){ return; }
-  for(const it of (purchase.purchase_items||[])){
-    const part = Data.parts.find(p=>p.id===it.part_id);
-    if(part){ await sb.from('parts').update({stock: Number(part.stock)-Number(it.qty)}).eq('id', it.part_id); }
-  }
-  const {error} = await sb.from('purchases').delete().eq('id', id);
-  if(error){ showToast(error.message); return; }
-  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+  Confirm.ask(t('confirmDeletePurchase'), async()=>{
+    const purchase = Data.purchases.find(p=>p.id===id);
+    if(!purchase){ return; }
+    for(const it of (purchase.purchase_items||[])){
+      const part = Data.parts.find(p=>p.id===it.part_id);
+      if(part){ await sb.from('parts').update({stock: Number(part.stock)-Number(it.qty)}).eq('id', it.part_id); }
+    }
+    const {error} = await sb.from('purchases').delete().eq('id', id);
+    if(error){ showToast(error.message); return; }
+    showToast(t('deleted')); await Data.refreshAll(); Router.render();
+  });
 };
 Pages.renderPurchaseCart = ()=>{
   const t=I18N.t.bind(I18N);
@@ -752,22 +773,23 @@ Pages.renderSalesHistoryTable = ()=>{
     <td><button class="btn btn-danger btn-sm" onclick="Pages.deleteSale('${s.id}')">${t('delete')}</button></td></tr>`).join('')}
   </tbody></table>`;
 };
-Pages.deleteSale = async(id)=>{
+Pages.deleteSale = (id)=>{
   const t=I18N.t.bind(I18N);
-  if(!confirm(t('confirmDeleteSale'))) return;
-  const sale = Data.sales.find(s=>s.id===id);
-  if(!sale){ return; }
-  for(const it of (sale.sale_items||[])){
-    const alreadyReturned = Data.returns.filter(r=>r.sale_item_id===it.id).reduce((a,r)=>a+Number(r.qty),0);
-    const restoreQty = Number(it.qty) - alreadyReturned;
-    if(restoreQty>0){
-      const part = Data.parts.find(p=>p.id===it.part_id);
-      if(part){ await sb.from('parts').update({stock: Number(part.stock)+restoreQty}).eq('id', it.part_id); }
+  Confirm.ask(t('confirmDeleteSale'), async()=>{
+    const sale = Data.sales.find(s=>s.id===id);
+    if(!sale){ return; }
+    for(const it of (sale.sale_items||[])){
+      const alreadyReturned = Data.returns.filter(r=>r.sale_item_id===it.id).reduce((a,r)=>a+Number(r.qty),0);
+      const restoreQty = Number(it.qty) - alreadyReturned;
+      if(restoreQty>0){
+        const part = Data.parts.find(p=>p.id===it.part_id);
+        if(part){ await sb.from('parts').update({stock: Number(part.stock)+restoreQty}).eq('id', it.part_id); }
+      }
     }
-  }
-  const {error} = await sb.from('sales').delete().eq('id', id);
-  if(error){ showToast(error.message); return; }
-  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+    const {error} = await sb.from('sales').delete().eq('id', id);
+    if(error){ showToast(error.message); return; }
+    showToast(t('deleted')); await Data.refreshAll(); Router.render();
+  });
 };
 Pages.refreshPosParts = ()=>{ document.getElementById('pos-parts').innerHTML = Pages.renderPosParts(); };
 Pages.renderPosParts = ()=>{
@@ -930,7 +952,15 @@ Pages.renderReceiptsTable = (sales)=>{
   ${sales.map(s=>{
     const cust = Data.customers.find(c=>c.id===s.customer_id);
     const staffProfile = Data.profiles.find(p=>p.id===s.staff_id);
-    return `<tr><td>#${s.receipt_no}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td>${cust?cust.name:t('walkIn')}</td>
+    const saleReturns = Data.returns.filter(r=>r.sale_id===s.id);
+    const returnedQty = saleReturns.reduce((a,r)=>a+Number(r.qty),0);
+    const totalQty = (s.sale_items||[]).reduce((a,it)=>a+Number(it.qty),0);
+    let returnBadge = '';
+    if(saleReturns.length){
+      const full = totalQty>0 && returnedQty>=totalQty;
+      returnBadge = `<span class="badge ${full?'badge-low':'badge-low'}" style="margin-inline-start:6px;">${full? t('fullyReturned') : t('partiallyReturned')}</span>`;
+    }
+    return `<tr><td>#${s.receipt_no}${returnBadge}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td>${cust?cust.name:t('walkIn')}</td>
     <td class="tabular">${money(s.total)}</td><td>${pmLabel(s.payment_method)}</td><td>${staffProfile?(staffProfile.full_name||staffProfile.email):'—'}</td>
     <td><button class="btn btn-outline btn-sm" onclick="Pages.reprintSale('${s.id}')">🖨 ${t('print')}</button></td></tr>`;
   }).join('')}
@@ -951,8 +981,8 @@ Pages.returns = ()=>{
     </div>
     <div class="card">
       <h3>${t('returnHistory')}</h3>
-      ${recentReturns.length? `<table><thead><tr><th>${t('date')}</th><th>${t('partName')}</th><th>${t('qty')}</th><th>${t('refundAmount')}</th></tr></thead><tbody>
-        ${recentReturns.map(r=>`<tr><td>${r.created_at.slice(0,16).replace('T',' ')}</td><td>${r.part_name||'—'}</td><td>${r.qty}</td><td class="tabular">${money(r.refund_amount)}</td></tr>`).join('')}
+      ${recentReturns.length? `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('partName')}</th><th>${t('qty')}</th><th>${t('refundAmount')}</th></tr></thead><tbody>
+        ${recentReturns.map(r=>{ const sale = Data.sales.find(s=>s.id===r.sale_id); return `<tr><td>${sale?`#${sale.receipt_no}`:'—'}</td><td>${r.created_at.slice(0,16).replace('T',' ')}</td><td>${r.part_name||'—'}</td><td>${r.qty}</td><td class="tabular">${money(r.refund_amount)}</td></tr>`; }).join('')}
       </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}
     </div>
   </div>`;
@@ -987,29 +1017,30 @@ Pages.findSaleForReturn = ()=>{
     <div class="field" style="margin-top:10px;"><label>${t('reason')}</label><input id="ret-reason" placeholder=""></div>
   `;
 };
-Pages.doFullReturn = async()=>{
+Pages.doFullReturn = ()=>{
   const t=I18N.t.bind(I18N);
   const sale = Pages._returnSale; if(!sale) return;
-  if(!confirm(t('confirmFullReturn'))) return;
-  const alreadyReturnedByItem = {};
-  Data.returns.filter(r=>r.sale_id===sale.id).forEach(r=>{ alreadyReturnedByItem[r.sale_item_id] = (alreadyReturnedByItem[r.sale_item_id]||0) + Number(r.qty); });
-  const reason = document.getElementById('ret-reason')?.value.trim() || t('returnFullReceipt');
-  for(const item of (sale.sale_items||[])){
-    const already = alreadyReturnedByItem[item.id]||0;
-    const remaining = Number(item.qty) - already;
-    if(remaining<=0) continue;
-    const refund_amount = remaining * Number(item.price);
-    const {error: retErr} = await sb.from('returns').insert({
-      sale_id: sale.id, sale_item_id: item.id, part_id: item.part_id, part_name: item.name,
-      qty: remaining, refund_amount, reason, staff_id: Auth.current.id
-    });
-    if(retErr){ showToast(retErr.message); return; }
-    const part = Data.parts.find(p=>p.id===item.part_id);
-    if(part){ await sb.from('parts').update({stock: Number(part.stock)+remaining}).eq('id', item.part_id); }
-  }
-  showToast(t('returnDone'));
-  await Data.refreshAll();
-  Router.render();
+  Confirm.ask(t('confirmFullReturn'), async()=>{
+    const alreadyReturnedByItem = {};
+    Data.returns.filter(r=>r.sale_id===sale.id).forEach(r=>{ alreadyReturnedByItem[r.sale_item_id] = (alreadyReturnedByItem[r.sale_item_id]||0) + Number(r.qty); });
+    const reason = document.getElementById('ret-reason')?.value.trim() || t('returnFullReceipt');
+    for(const item of (sale.sale_items||[])){
+      const already = alreadyReturnedByItem[item.id]||0;
+      const remaining = Number(item.qty) - already;
+      if(remaining<=0) continue;
+      const refund_amount = remaining * Number(item.price);
+      const {error: retErr} = await sb.from('returns').insert({
+        sale_id: sale.id, sale_item_id: item.id, part_id: item.part_id, part_name: item.name,
+        qty: remaining, refund_amount, reason, staff_id: Auth.current.id
+      });
+      if(retErr){ showToast(retErr.message); return; }
+      const part = Data.parts.find(p=>p.id===item.part_id);
+      if(part){ await sb.from('parts').update({stock: Number(part.stock)+remaining}).eq('id', item.part_id); }
+    }
+    showToast(t('returnDone'));
+    await Data.refreshAll();
+    Router.render();
+  });
 };
 Pages.doReturn = async(saleItemId, remaining)=>{
   const t=I18N.t.bind(I18N);
@@ -1080,11 +1111,13 @@ Pages.saveExpense = async()=>{
   if(error){ showToast(error.message); return; }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
 };
-Pages.deleteExpense = async(id)=>{
-  const t=I18N.t.bind(I18N); if(!confirm(t('confirmDelete'))) return;
-  const {error}=await sb.from('expenses').delete().eq('id',id);
-  if(error){ showToast(error.message); return; }
-  showToast(t('deleted')); await Data.refreshAll(); Router.render();
+Pages.deleteExpense = (id)=>{
+  const t=I18N.t.bind(I18N);
+  Confirm.ask(t('confirmDelete'), async()=>{
+    const {error}=await sb.from('expenses').delete().eq('id',id);
+    if(error){ showToast(error.message); return; }
+    showToast(t('deleted')); await Data.refreshAll(); Router.render();
+  });
 };
 
 /* ---- STAFF ---- */
