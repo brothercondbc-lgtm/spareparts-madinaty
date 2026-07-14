@@ -87,12 +87,12 @@
   .cart-total-row.grand{ font-size:17px; font-weight:800; color:var(--primary); border-top:2px solid var(--border); margin-top:8px; padding-top:10px; }
   .toast{ position:fixed; bottom:22px; right:22px; background:var(--primary); color:#fff; padding:12px 18px; border-radius:9px; box-shadow:var(--shadow); font-size:13.5px; font-weight:600; z-index:100; opacity:0; transform:translateY(10px); transition:all .25s ease; }
   body[dir="rtl"] .toast{ right:auto; left:22px; } .toast.show{ opacity:1; transform:translateY(0); }
-  #receipt-print{ display:none; }
+  #print-doc{ display:none; }
   @media print{
     @page{ margin: 12mm; }
-    body *{ visibility:hidden; }
-    #receipt-print, #receipt-print *{ visibility:visible; }
-    #receipt-print{ display:block; position:absolute; top:0; left:0; width:100%; padding:0; font-family:'IBM Plex Sans', Arial, sans-serif; color:#141414; }
+    html, body{ height:auto !important; }
+    #app, #login-screen, #modal-overlay, .toast{ display:none !important; }
+    #print-doc{ display:block !important; position:static !important; width:100%; padding:0; font-family:'IBM Plex Sans', Arial, sans-serif; color:#141414; }
   }
   .rc-doc{ max-width:720px; margin:0 auto; }
   .rc-titlebar{ text-align:center; letter-spacing:2px; font-size:12px; font-weight:700; color:#444; text-transform:uppercase; border-top:2px solid #141414; border-bottom:2px solid #141414; padding:5px 0; margin:10px 0 14px; }
@@ -111,6 +111,13 @@
   .rc-totals .row.grand{ border-top:2px solid #141414; margin-top:4px; padding-top:8px; font-size:15px; font-weight:800; color:#16324F; }
   .rc-footer{ margin-top:22px; padding-top:10px; border-top:1px dashed #999; font-size:11px; color:#444; display:flex; justify-content:space-between; }
   .rc-thanks{ text-align:center; margin-top:16px; font-size:12px; font-style:italic; color:#333; }
+  .rp-summary{ display:flex; gap:14px; margin:12px 0 16px; }
+  .rp-summary .box{ flex:1; text-align:center; border:1.5px solid #ddd; border-radius:6px; padding:8px 4px; }
+  .rp-summary .box .num{ font-size:18px; font-weight:800; }
+  .rp-summary .box .lbl{ font-size:9.5px; text-transform:uppercase; letter-spacing:0.3px; color:#666; margin-top:2px; }
+  .rp-table td.status-match{ color:#2E7D5B; font-weight:700; }
+  .rp-table td.status-short{ color:#C1443C; font-weight:700; }
+  .rp-table td.status-over{ color:#B8860B; font-weight:700; }
   ::placeholder{ color:#9AA7B2; } .muted{ color:var(--ink-soft); font-size:12.5px; } .req{ color:var(--danger); }
   #boot-error{ display:none; position:fixed; inset:0; background:#fff; z-index:999; padding:40px; font-family:sans-serif; color:#C1443C; }
 </style>
@@ -163,7 +170,7 @@
 
 <div class="overlay" id="modal-overlay"><div class="modal" id="modal-box"></div></div>
 <div class="toast" id="toast"></div>
-<div id="receipt-print"></div>
+<div id="print-doc"></div>
 
 <script>
 /* ============================================================
@@ -226,6 +233,11 @@ en:{
   paymentMethod:"Payment method", cash:"Cash", visa:"Visa", instapay:"InstaPay", note:"Note", noteOptional:"Optional note about this sale...",
   confirmTitle:"Please confirm", confirmYes:"Yes, continue",
   fullyReturned:"Fully returned", partiallyReturned:"Partially returned",
+  qtyUnavailable:"That quantity isn't available", confirmSaleMsg:"Confirm this sale?",
+  stocktake:"Stock Count", stocktakeHint:"Walk your warehouse and enter what you physically count next to each part. Leave blank any part you didn't count.",
+  systemQty:"System qty", countedQty:"Counted qty", difference:"Difference", generateReport:"Generate report",
+  statusMatch:"Matches", statusShort:"Short", statusOver:"Over", stockCountReport:"Stock Count Report",
+  totalCounted:"Items counted", status:"Status",
 },
 ar:{
   appName:"نظام قطع الغيار", branch:"فرع مدينتي",
@@ -274,6 +286,11 @@ ar:{
   paymentMethod:"طريقة الدفع", cash:"نقداً", visa:"فيزا", instapay:"إنستاباي", note:"ملاحظة", noteOptional:"ملاحظة اختيارية عن عملية البيع...",
   confirmTitle:"تأكيد العملية", confirmYes:"نعم، متابعة",
   fullyReturned:"مرتجع بالكامل", partiallyReturned:"مرتجع جزئياً",
+  qtyUnavailable:"هذه الكمية غير متوفرة", confirmSaleMsg:"هل تريد تأكيد عملية البيع هذه؟",
+  stocktake:"جرد المخزون", stocktakeHint:"تجول في المخزن واكتب الكمية الفعلية التي تعدّها أمام كل قطعة. اترك أي قطعة لم تعدّها فارغة.",
+  systemQty:"الكمية بالنظام", countedQty:"الكمية الفعلية", difference:"الفرق", generateReport:"إصدار التقرير",
+  statusMatch:"مطابق", statusShort:"عجز", statusOver:"زيادة", stockCountReport:"تقرير جرد المخزون",
+  totalCounted:"عدد الأصناف المعدودة", status:"الحالة",
 }
 };
 const I18N = {
@@ -419,6 +436,7 @@ const NAV_ITEMS = [
   {key:'suppliers', icon:'⇄', adminOnly:false}, {key:'purchases', icon:'⇩', adminOnly:false},
   {key:'pos', icon:'🛒', adminOnly:false}, {key:'returns', icon:'↺', adminOnly:false},
   {key:'receipts', icon:'🧾', adminOnly:false},
+  {key:'stocktake', icon:'✓', adminOnly:false},
   {key:'customers', icon:'☺', adminOnly:false},
   {key:'finance', icon:'▤', adminOnly:true}, {key:'staff', icon:'⚙', adminOnly:true},
 ];
@@ -436,7 +454,7 @@ const Router = {
     const item = NAV_ITEMS.find(n=>n.key===this.active);
     const page = (!item.adminOnly || Auth.isAdmin()) ? this.active : 'dashboard';
     this.active = page;
-    const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, returns:Pages.returns, receipts:Pages.receipts, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
+    const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, returns:Pages.returns, receipts:Pages.receipts, stocktake:Pages.stocktake, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
     document.getElementById('main').innerHTML = renderers[page]();
     if(page==='pos' && Pages._pendingCustomerSelect){
       const hid = document.getElementById('pos-customer');
@@ -799,10 +817,17 @@ Pages.renderPosParts = ()=>{
   return parts.map(p=>`<div class="part-pick" onclick="Pages.addToCart('${p.id}')"><div><div class="pn">${p.name}</div><div class="pm">${p.sku||''} · ${t('stock')}: ${p.stock} ${p.unit||''}</div></div><div class="tabular" style="font-weight:700;">${money(p.sell_price)}</div></div>`).join('');
 };
 Pages.addToCart = (partId)=>{
+  const t=I18N.t.bind(I18N);
   const p = Data.parts.find(x=>x.id===partId); if(!p) return;
   const existing = Pages._cart.find(c=>c.partId===partId);
-  if(existing){ if(existing.qty < Number(p.stock)) existing.qty++; }
-  else{ Pages._cart.push({partId, qty:1, price:Number(p.sell_price), name:p.name, cost:Number(p.cost_price)}); }
+  if(existing){
+    if(existing.qty < Number(p.stock)){ existing.qty++; }
+    else{ showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${p.stock}`); }
+  }
+  else{
+    if(Number(p.stock)<=0){ showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${p.stock}`); return; }
+    Pages._cart.push({partId, qty:1, price:Number(p.sell_price), name:p.name, cost:Number(p.cost_price)});
+  }
   document.getElementById('pos-cart').innerHTML = Pages.renderCart();
 };
 Pages.renderCart = ()=>{
@@ -818,7 +843,17 @@ Pages.renderCart = ()=>{
   setTimeout(()=>{ const tt=document.getElementById('pos-totals'); if(tt) tt.innerHTML = `<div class="cart-total-row"><span>${t('subtotal')}</span><span class="tabular">${money(subtotal)}</span></div><div class="cart-total-row grand"><span>${t('grandTotal')}</span><span class="tabular">${money(grand)} ${t('currency')}</span></div>`; },0);
   return rows;
 };
-Pages.updateCartQty = (i,val)=>{ const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId); let q=toNum(val); if(isNaN(q)||q<=0) q=1; if(p&&q>Number(p.stock)) q=Number(p.stock); c.qty=q; document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
+Pages.updateCartQty = (i,val)=>{
+  const t=I18N.t.bind(I18N);
+  const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId);
+  let q=toNum(val); if(isNaN(q)||q<=0) q=1;
+  if(p && q>Number(p.stock)){
+    showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${p.stock}`);
+    document.getElementById('pos-cart').innerHTML=Pages.renderCart();
+    return;
+  }
+  c.qty=q; document.getElementById('pos-cart').innerHTML=Pages.renderCart();
+};
 Pages.updateCartPrice = (i,val)=>{ const c=Pages._cart[i]; let pr=toNum(val); if(isNaN(pr)||pr<0) pr=0; c.price=pr; document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.removeCartItem = (i)=>{ Pages._cart.splice(i,1); document.getElementById('pos-cart').innerHTML=Pages.renderCart(); };
 Pages.checkout = async()=>{
@@ -829,6 +864,17 @@ Pages.checkout = async()=>{
   const grand = Math.max(0, subtotal-discount);
   const paid = toNum(document.getElementById('pos-paid').value);
   if(isNaN(paid) || paid < grand){ showToast(t('changeInvalid')); return; }
+  for(const c of Pages._cart){
+    const p = Data.parts.find(x=>x.id===c.partId);
+    if(!p || Number(p.stock) < c.qty){ showToast(`${t('insufficientStock')} — ${c.name}: ${t('stock')} ${p?p.stock:0}`); return; }
+  }
+  const itemsSummary = Pages._cart.map(c=>`${c.name} × ${c.qty}`).join('<br>');
+  Confirm.ask(`${t('confirmSaleMsg')}<br><br><b>${itemsSummary}</b><br><br>${t('grandTotal')}: <b>${money(grand)} ${t('currency')}</b>`, ()=>{
+    Pages._finalizeCheckout(discount, subtotal, grand, paid);
+  });
+};
+Pages._finalizeCheckout = async(discount, subtotal, grand, paid)=>{
+  const t=I18N.t.bind(I18N);
   for(const c of Pages._cart){ const p = Data.parts.find(x=>x.id===c.partId); if(!p || Number(p.stock) < c.qty){ showToast(t('insufficientStock')); return; } }
   const receipt_no = (Data.sales.length+1).toString().padStart(5,'0');
   const chosenDate = document.getElementById('pos-date').value || todayStr();
@@ -906,7 +952,7 @@ Pages.printReceipt = (sale)=>{
     staffName: Auth.current.full_name||Auth.current.email,
     paymentMethod: sale.payment_method, note: sale.note
   });
-  document.getElementById('receipt-print').innerHTML = html;
+  document.getElementById('print-doc').innerHTML = html;
   setTimeout(()=>window.print(), 150);
 };
 Pages.reprintSale = (id)=>{
@@ -922,7 +968,7 @@ Pages.reprintSale = (id)=>{
     staffName: staffProfile ? (staffProfile.full_name||staffProfile.email) : '—',
     paymentMethod: sale.payment_method, note: sale.note
   });
-  document.getElementById('receipt-print').innerHTML = html;
+  document.getElementById('print-doc').innerHTML = html;
   setTimeout(()=>window.print(), 150);
 };
 
@@ -965,6 +1011,103 @@ Pages.renderReceiptsTable = (sales)=>{
     <td><button class="btn btn-outline btn-sm" onclick="Pages.reprintSale('${s.id}')">🖨 ${t('print')}</button></td></tr>`;
   }).join('')}
   </tbody></table>`;
+};
+
+/* ---- STOCK COUNT (warehouse audit) ---- */
+Pages.stocktake = ()=>{
+  const t=I18N.t.bind(I18N);
+  return `${Pages.topbar('stocktake')}
+  <div class="card">
+    <p class="muted" style="margin-bottom:12px;">${t('stocktakeHint')}</p>
+    <div class="search-row"><input id="st-search" placeholder="${t('search')}" oninput="Pages.refreshStocktakeTable()"></div>
+    <div id="st-table-wrap">${Pages.renderStocktakeTable(Data.parts)}</div>
+    <button class="btn btn-accent" style="margin-top:14px;" onclick="Pages.generateStocktakeReport()">🖨 ${t('generateReport')}</button>
+  </div>`;
+};
+Pages.refreshStocktakeTable = ()=>{
+  const q = document.getElementById('st-search').value.trim().toLowerCase();
+  const parts = Data.parts.filter(p=>!q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  document.getElementById('st-table-wrap').innerHTML = Pages.renderStocktakeTable(parts);
+};
+Pages.renderStocktakeTable = (parts)=>{
+  const t=I18N.t.bind(I18N);
+  if(!parts.length) return `<div class="empty-state">${t('noData')}</div>`;
+  return `<table><thead><tr><th>${t('sku')}</th><th>${t('partName')}</th><th>${t('systemQty')}</th><th>${t('countedQty')}</th><th>${t('difference')}</th></tr></thead><tbody>
+  ${parts.map(p=>`<tr>
+    <td>${p.sku||'—'}</td><td>${p.name}</td><td class="tabular">${p.stock} ${p.unit||''}</td>
+    <td><input type="text" inputmode="decimal" placeholder="—" style="width:80px;" id="st-count-${p.id}" oninput="Pages.updateStocktakeDiff('${p.id}')"></td>
+    <td id="st-diff-${p.id}" class="tabular">—</td>
+  </tr>`).join('')}
+  </tbody></table>`;
+};
+Pages.updateStocktakeDiff = (partId)=>{
+  const t=I18N.t.bind(I18N);
+  const p = Data.parts.find(x=>x.id===partId); if(!p) return;
+  const input = document.getElementById(`st-count-${partId}`);
+  const cell = document.getElementById(`st-diff-${partId}`);
+  const val = input.value.trim();
+  if(val===''){ cell.innerHTML = '—'; return; }
+  const counted = toNum(val);
+  if(isNaN(counted)){ cell.innerHTML = '—'; return; }
+  const diff = counted - Number(p.stock);
+  if(diff===0){ cell.innerHTML = `<span style="color:var(--success);font-weight:700;">${t('statusMatch')}</span>`; }
+  else if(diff<0){ cell.innerHTML = `<span style="color:var(--danger);font-weight:700;">${diff} (${t('statusShort')})</span>`; }
+  else{ cell.innerHTML = `<span style="color:#B8860B;font-weight:700;">+${diff} (${t('statusOver')})</span>`; }
+};
+Pages.generateStocktakeReport = ()=>{
+  const t=I18N.t.bind(I18N);
+  const rows = [];
+  Data.parts.forEach(p=>{
+    const input = document.getElementById(`st-count-${p.id}`);
+    if(!input) return;
+    const val = input.value.trim();
+    if(val==='') return;
+    const counted = toNum(val);
+    if(isNaN(counted)) return;
+    const diff = counted - Number(p.stock);
+    const status = diff===0 ? 'match' : diff<0 ? 'short' : 'over';
+    rows.push({sku:p.sku||'—', name:p.name, systemQty:p.stock, countedQty:counted, diff, status});
+  });
+  if(!rows.length){ showToast(t('requiredFields')); return; }
+  const matched = rows.filter(r=>r.status==='match').length;
+  const short = rows.filter(r=>r.status==='short').length;
+  const over = rows.filter(r=>r.status==='over').length;
+  const statusLabel = st=> st==='match'?t('statusMatch') : st==='short'?t('statusShort') : t('statusOver');
+  const statusClass = st=> st==='match'?'status-match' : st==='short'?'status-short' : 'status-over';
+  const dateStr = new Date().toISOString().slice(0,16).replace('T',' ');
+  const html = `
+  <div class="rc-doc">
+    <div class="rc-letterhead" style="direction:ltr; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+      <img src="logo.png" alt="Brother Cond" style="width:70px;height:70px;object-fit:contain;flex-shrink:0;">
+      <div style="text-align:right; font-size:11px; line-height:1.6; color:#111;">
+        <div style="font-weight:800; font-size:15px; margin-bottom:3px; color:#16324F;">Brother Cond For Air Conditioning</div>
+        <div>Showrooms: Nasry city - Rehab City - Madinaty - First settlement</div>
+        <div>Tel: 01006889931 &ndash; 01026586700</div>
+        <div>After Service Center: 01284142408 - 01271232158</div>
+        <div>Hotline: 01222211310</div>
+      </div>
+    </div>
+    <div class="rc-titlebar">${t('stockCountReport')}</div>
+    <div class="rc-meta-grid">
+      <div><div><span class="label">${t('date')}:</span> ${dateStr}</div></div>
+      <div style="text-align:right;"><div><span class="label">${t('servedBy')}:</span> ${Auth.current.full_name||Auth.current.email}</div></div>
+    </div>
+    <div class="rp-summary">
+      <div class="box"><div class="num">${rows.length}</div><div class="lbl">${t('totalCounted')}</div></div>
+      <div class="box"><div class="num" style="color:#2E7D5B;">${matched}</div><div class="lbl">${t('statusMatch')}</div></div>
+      <div class="box"><div class="num" style="color:#C1443C;">${short}</div><div class="lbl">${t('statusShort')}</div></div>
+      <div class="box"><div class="num" style="color:#B8860B;">${over}</div><div class="lbl">${t('statusOver')}</div></div>
+    </div>
+    <table class="rc-table rp-table">
+      <thead><tr><th>${t('sku')}</th><th>${t('partName')}</th><th class="num">${t('systemQty')}</th><th class="num">${t('countedQty')}</th><th class="num">${t('difference')}</th><th>${t('status')}</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr><td>${r.sku}</td><td>${r.name}</td><td class="num">${r.systemQty}</td><td class="num">${r.countedQty}</td><td class="num">${r.diff>0?'+':''}${r.diff}</td><td class="${statusClass(r.status)}">${statusLabel(r.status)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="rc-footer"><span>Brother Cond For Air Conditioning</span><span>${t('stockCountReport')}</span></div>
+  </div>`;
+  document.getElementById('print-doc').innerHTML = html;
+  setTimeout(()=>window.print(), 150);
 };
 
 /* ---- RETURNS ---- */
