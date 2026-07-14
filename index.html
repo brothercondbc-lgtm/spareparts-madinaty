@@ -238,6 +238,7 @@ en:{
   systemQty:"System qty", countedQty:"Counted qty", difference:"Difference", generateReport:"Generate report",
   statusMatch:"Matches", statusShort:"Short", statusOver:"Over", stockCountReport:"Stock Count Report",
   totalCounted:"Items counted", status:"Status",
+  salesRole:"Sales", salesRoleHint:"Sales staff can only use Sales, Returns, Receipts, and view Inventory (read-only). No Dashboard, no editing or deleting.",
 },
 ar:{
   appName:"نظام قطع الغيار", branch:"فرع مدينتي",
@@ -291,6 +292,7 @@ ar:{
   systemQty:"الكمية بالنظام", countedQty:"الكمية الفعلية", difference:"الفرق", generateReport:"إصدار التقرير",
   statusMatch:"مطابق", statusShort:"عجز", statusOver:"زيادة", stockCountReport:"تقرير جرد المخزون",
   totalCounted:"عدد الأصناف المعدودة", status:"الحالة",
+  salesRole:"مبيعات", salesRoleHint:"موظف المبيعات يمكنه فقط استخدام: البيع، المرتجعات، الإيصالات، ومشاهدة المخزون فقط (بدون تعديل). لا يظهر له لوحة التحكم الرئيسية ولا يمكنه التعديل أو الحذف.",
 }
 };
 const I18N = {
@@ -386,7 +388,7 @@ const Auth = {
     const {data} = await sb.from('profiles').select('*').eq('id', user.id).single();
     this.current = data || {id:user.id, email:user.email, full_name:user.email, role:'staff'};
     document.getElementById('who-name').textContent = this.current.full_name || this.current.email;
-    document.getElementById('who-role').textContent = this.current.role==='admin' ? I18N.t('admin') : I18N.t('staffRole');
+    document.getElementById('who-role').textContent = this.roleLabel();
   },
   async logout(){
     await sb.auth.signOut();
@@ -396,6 +398,21 @@ const Auth = {
     document.getElementById('lg-username').value=''; document.getElementById('lg-password').value='';
   },
   isAdmin(){ return this.current && this.current.role==='admin'; },
+  isSales(){ return this.current && this.current.role==='sales'; },
+  canAccess(navKey){
+    if(!this.current) return false;
+    const item = NAV_ITEMS.find(n=>n.key===navKey);
+    if(!item) return false;
+    return item.roles.includes(this.current.role);
+  },
+  roleLabel(){
+    const t = I18N.t.bind(I18N);
+    if(!this.current) return '';
+    if(this.current.role==='admin') return t('admin');
+    if(this.current.role==='sales') return t('salesRole');
+    return t('staffRole');
+  },
+  defaultPage(){ return this.isSales() ? 'pos' : 'dashboard'; },
   async restoreSession(){
     const {data:{session}} = await sb.auth.getSession();
     if(session && session.user){
@@ -432,28 +449,31 @@ const Confirm = {
    NAVIGATION
 ============================================================ */
 const NAV_ITEMS = [
-  {key:'dashboard', icon:'◆', adminOnly:false}, {key:'inventory', icon:'▣', adminOnly:false},
-  {key:'suppliers', icon:'⇄', adminOnly:false}, {key:'purchases', icon:'⇩', adminOnly:false},
-  {key:'pos', icon:'🛒', adminOnly:false}, {key:'returns', icon:'↺', adminOnly:false},
-  {key:'receipts', icon:'🧾', adminOnly:false},
-  {key:'stocktake', icon:'✓', adminOnly:false},
-  {key:'customers', icon:'☺', adminOnly:false},
-  {key:'finance', icon:'▤', adminOnly:true}, {key:'staff', icon:'⚙', adminOnly:true},
+  {key:'dashboard', icon:'◆', roles:['admin','staff']},
+  {key:'inventory', icon:'▣', roles:['admin','staff','sales']},
+  {key:'suppliers', icon:'⇄', roles:['admin','staff']},
+  {key:'purchases', icon:'⇩', roles:['admin','staff']},
+  {key:'pos', icon:'🛒', roles:['admin','staff','sales']},
+  {key:'returns', icon:'↺', roles:['admin','staff','sales']},
+  {key:'receipts', icon:'🧾', roles:['admin','staff','sales']},
+  {key:'stocktake', icon:'✓', roles:['admin','staff']},
+  {key:'customers', icon:'☺', roles:['admin','staff']},
+  {key:'finance', icon:'▤', roles:['admin']},
+  {key:'staff', icon:'⚙', roles:['admin']},
 ];
 const Router = {
   active:'dashboard',
   go(key){ this.active=key; this.render(); },
   renderNav(){
     const t=I18N.t.bind(I18N);
-    document.getElementById('nav-list').innerHTML = NAV_ITEMS.filter(n=> !n.adminOnly || Auth.isAdmin()).map(n=>
+    document.getElementById('nav-list').innerHTML = NAV_ITEMS.filter(n=> Auth.canAccess(n.key)).map(n=>
       `<div class="nav-item ${this.active===n.key?'active':''}" onclick="Router.go('${n.key}')"><span class="ic">${n.icon}</span><span>${t(n.key)}</span></div>`).join('');
   },
   render(){
     this.renderNav();
-    document.getElementById('who-role').textContent = Auth.isAdmin() ? I18N.t('admin') : I18N.t('staffRole');
-    const item = NAV_ITEMS.find(n=>n.key===this.active);
-    const page = (!item.adminOnly || Auth.isAdmin()) ? this.active : 'dashboard';
-    this.active = page;
+    document.getElementById('who-role').textContent = Auth.roleLabel();
+    if(!Auth.canAccess(this.active)){ this.active = Auth.defaultPage(); }
+    const page = this.active;
     const renderers = {dashboard:Pages.dashboard, inventory:Pages.inventory, suppliers:Pages.suppliers, purchases:Pages.purchases, pos:Pages.pos, returns:Pages.returns, receipts:Pages.receipts, stocktake:Pages.stocktake, customers:Pages.customers, finance:Pages.finance, staff:Pages.staff};
     document.getElementById('main').innerHTML = renderers[page]();
     if(page==='pos' && Pages._pendingCustomerSelect){
@@ -496,21 +516,23 @@ Pages.dashboard = ()=>{
 /* ---- INVENTORY ---- */
 Pages.inventory = ()=>{
   const t=I18N.t.bind(I18N);
+  const canEdit = !Auth.isSales();
   return `${Pages.topbar('inventory')}
   <div class="card">
-    <div class="search-row"><input id="inv-search" placeholder="${t('search')}" oninput="Pages.filterInventory()"><button class="btn btn-accent" onclick="Pages.openPartModal()">+ ${t('addPart')}</button></div>
+    <div class="search-row"><input id="inv-search" placeholder="${t('search')}" oninput="Pages.filterInventory()">${canEdit? `<button class="btn btn-accent" onclick="Pages.openPartModal()">+ ${t('addPart')}</button>` : ''}</div>
     <div id="inv-table-wrap">${Pages.renderPartsTable(Data.parts)}</div>
   </div>`;
 };
 Pages.renderPartsTable = (parts)=>{
   const t=I18N.t.bind(I18N);
+  const canEdit = !Auth.isSales();
   if(!parts.length) return `<div class="empty-state">${t('noData')}</div>`;
   const supName = id=>{ const s=Data.suppliers.find(x=>x.id===id); return s? s.name : t('noSupplier'); };
-  return `<table><thead><tr><th>${t('sku')}</th><th>${t('partName')}</th><th>${t('category')}</th><th>${t('supplier')}</th><th>${t('costPrice')}</th><th>${t('sellPrice')}</th><th>${t('stock')}</th><th>${t('actions')}</th></tr></thead><tbody>
+  return `<table><thead><tr><th>${t('sku')}</th><th>${t('partName')}</th><th>${t('category')}</th><th>${t('supplier')}</th><th>${t('costPrice')}</th><th>${t('sellPrice')}</th><th>${t('stock')}</th>${canEdit?`<th>${t('actions')}</th>`:''}</tr></thead><tbody>
   ${parts.map(p=>`<tr><td>${p.sku||'—'}</td><td>${p.name}</td><td>${p.category||'—'}</td><td>${supName(p.supplier_id)}</td>
     <td class="tabular">${money(p.cost_price)}</td><td class="tabular">${money(p.sell_price)}</td>
     <td>${p.stock} ${p.unit||''} ${Number(p.stock)<=Number(p.reorder_level)?`<span class="badge badge-low">${t('lowStockAlert')}</span>`:''}</td>
-    <td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openPartModal('${p.id}')">${t('edit')}</button><button class="btn btn-danger btn-sm" onclick="Pages.deletePart('${p.id}')">${t('delete')}</button></td></tr>`).join('')}
+    ${canEdit? `<td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openPartModal('${p.id}')">${t('edit')}</button><button class="btn btn-danger btn-sm" onclick="Pages.deletePart('${p.id}')">${t('delete')}</button></td>` : ''}</tr>`).join('')}
   </tbody></table>`;
 };
 Pages.filterInventory = ()=>{
@@ -784,11 +806,12 @@ Pages.quickAddCustomerWithName = (name)=>{
 };
 Pages.renderSalesHistoryTable = ()=>{
   const t=I18N.t.bind(I18N);
+  const canDelete = !Auth.isSales();
   const sales = Data.sales.slice(0,15);
   if(!sales.length) return `<div class="empty-state">${t('noData')}</div>`;
-  return `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('total')}</th><th>${t('actions')}</th></tr></thead><tbody>
+  return `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('total')}</th>${canDelete?`<th>${t('actions')}</th>`:''}</tr></thead><tbody>
     ${sales.map(s=>`<tr><td>#${s.receipt_no}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td class="tabular">${money(s.total)}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="Pages.deleteSale('${s.id}')">${t('delete')}</button></td></tr>`).join('')}
+    ${canDelete? `<td><button class="btn btn-danger btn-sm" onclick="Pages.deleteSale('${s.id}')">${t('delete')}</button></td>` : ''}</tr>`).join('')}
   </tbody></table>`;
 };
 Pages.deleteSale = (id)=>{
@@ -1268,10 +1291,11 @@ Pages.staff = ()=>{
   const t=I18N.t.bind(I18N);
   if(!Auth.isAdmin()) return `${Pages.topbar('staff')}<div class="card"><div class="empty-state">${t('accessDenied')}</div></div>`;
   const list = Data.profiles;
+  const roleLabel = r=> r==='admin'?t('admin') : r==='sales'?t('salesRole') : t('staffRole');
   return `${Pages.topbar('staff')}<div class="card">
     <p class="muted">${t('addStaffHint')}</p>
     <table><thead><tr><th>${t('fullName')}</th><th>${t('username')}</th><th>${t('role')}</th><th>${t('actions')}</th></tr></thead><tbody>
-    ${list.map(s=>`<tr><td>${s.full_name||'—'}</td><td>${s.email||'—'}</td><td>${s.role==='admin'?t('admin'):t('staffRole')}</td>
+    ${list.map(s=>`<tr><td>${s.full_name||'—'}</td><td>${s.email||'—'}</td><td>${roleLabel(s.role)}</td>
     <td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openStaffModal('${s.id}')">${t('edit')}</button></td></tr>`).join('')}
     </tbody></table></div>`;
 };
@@ -1279,7 +1303,12 @@ Pages.openStaffModal = (id)=>{
   const t=I18N.t.bind(I18N); const s = Data.profiles.find(x=>x.id===id);
   Modal.open(t('edit'), `
     <div class="field"><label>${t('fullName')}</label><input id="stf-name" value="${s.full_name||''}"></div>
-    <div class="field"><label>${t('role')}</label><select id="stf-role"><option value="staff" ${s.role==='staff'?'selected':''}>${t('staffRole')}</option><option value="admin" ${s.role==='admin'?'selected':''}>${t('admin')}</option></select></div>
+    <div class="field"><label>${t('role')}</label><select id="stf-role">
+      <option value="staff" ${s.role==='staff'?'selected':''}>${t('staffRole')}</option>
+      <option value="sales" ${s.role==='sales'?'selected':''}>${t('salesRole')}</option>
+      <option value="admin" ${s.role==='admin'?'selected':''}>${t('admin')}</option>
+    </select></div>
+    <div class="muted" style="margin-top:6px;">${t('salesRoleHint')}</div>
   `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.saveStaff('${id}')">${t('save')}</button>`);
 };
 Pages.saveStaff = async(id)=>{
