@@ -324,6 +324,8 @@ const I18N = {
    HELPERS
 ============================================================ */
 function money(n){ n = Number(n)||0; return n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function round2(n){ return Math.round((Number(n)||0)*100)/100; }
+function qtyFmt(n){ return round2(n).toString(); }
 function normalizeDigits(str){
   if(str===null||str===undefined) return str;
   const east='٠١٢٣٤٥٦٧٨٩', ext='۰۱۲۳۴۵۶۷۸۹';
@@ -508,7 +510,7 @@ Pages.dashboard = ()=>{
     <div class="stat-card ${lowStock.length?'danger':''}"><div class="stat-label">${t('lowStockCount')}</div><div class="stat-value tabular">${lowStock.length}</div></div>
   </div>
   <div class="grid grid-2">
-    <div class="card"><h3>${t('lowStockAlert')}</h3>${lowStock.length? `<table><thead><tr><th>${t('partName')}</th><th>${t('stock')}</th><th>${t('reorderLevel')}</th></tr></thead><tbody>${lowStock.map(p=>`<tr><td>${p.name}</td><td>${p.stock}</td><td>${p.reorder_level}</td></tr>`).join('')}</tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
+    <div class="card"><h3>${t('lowStockAlert')}</h3>${lowStock.length? `<table><thead><tr><th>${t('partName')}</th><th>${t('stock')}</th><th>${t('reorderLevel')}</th></tr></thead><tbody>${lowStock.map(p=>`<tr><td>${p.name}</td><td>${qtyFmt(p.stock)}</td><td>${qtyFmt(p.reorder_level)}</td></tr>`).join('')}</tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
     <div class="card"><h3>${t('recentSales')}</h3>${recentSales.length? `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('total')}</th></tr></thead><tbody>${recentSales.map(s=>`<tr><td>#${s.receipt_no}</td><td>${s.created_at.slice(0,16).replace('T',' ')}</td><td class="tabular">${money(s.total)}</td></tr>`).join('')}</tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}</div>
   </div>`;
 };
@@ -531,7 +533,7 @@ Pages.renderPartsTable = (parts)=>{
   return `<table><thead><tr><th>${t('sku')}</th><th>${t('partName')}</th><th>${t('category')}</th><th>${t('supplier')}</th><th>${t('costPrice')}</th><th>${t('sellPrice')}</th><th>${t('stock')}</th>${canEdit?`<th>${t('actions')}</th>`:''}</tr></thead><tbody>
   ${parts.map(p=>`<tr><td>${p.sku||'—'}</td><td>${p.name}</td><td>${p.category||'—'}</td><td>${supName(p.supplier_id)}</td>
     <td class="tabular">${money(p.cost_price)}</td><td class="tabular">${money(p.sell_price)}</td>
-    <td>${p.stock} ${p.unit||''} ${Number(p.stock)<=Number(p.reorder_level)?`<span class="badge badge-low">${t('lowStockAlert')}</span>`:''}</td>
+    <td>${qtyFmt(p.stock)} ${p.unit||''} ${Number(p.stock)<=Number(p.reorder_level)?`<span class="badge badge-low">${t('lowStockAlert')}</span>`:''}</td>
     ${canEdit? `<td class="row-actions"><button class="btn btn-outline btn-sm" onclick="Pages.openPartModal('${p.id}')">${t('edit')}</button><button class="btn btn-danger btn-sm" onclick="Pages.deletePart('${p.id}')">${t('delete')}</button></td>` : ''}</tr>`).join('')}
   </tbody></table>`;
 };
@@ -552,18 +554,18 @@ Pages.openPartModal = (id)=>{
     <div class="grid grid-3"><div class="field"><label>${t('costPrice')}</label><input id="pf-cost" type="text" inputmode="decimal" value="${p?p.cost_price:''}"></div>
     <div class="field"><label>${t('sellPrice')}</label><input id="pf-sell" type="text" inputmode="decimal" value="${p?p.sell_price:''}"></div>
     <div class="field"><label>${t('unit')}</label><input id="pf-unit" placeholder="pcs" value="${p?p.unit||'':''}"></div></div>
-    <div class="grid grid-2"><div class="field"><label>${t('stock')}</label><input id="pf-stock" type="text" inputmode="decimal" value="${p?p.stock:0}"></div>
+    <div class="grid grid-2"><div class="field"><label>${t('stock')}</label><input id="pf-stock" type="text" inputmode="decimal" value="${p?qtyFmt(p.stock):0}"></div>
     <div class="field"><label>${t('reorderLevel')}</label><input id="pf-reorder" type="text" inputmode="decimal" value="${p?p.reorder_level:2}"></div></div>
   `, `<button class="btn btn-outline" onclick="Modal.close()">${t('cancel')}</button><button class="btn btn-primary" onclick="Pages.savePart('${p?p.id:''}')">${t('save')}</button>`);
 };
 Pages.savePart = async(id)=>{
   const t=I18N.t.bind(I18N);
   const name=document.getElementById('pf-name').value.trim();
-  const cost=toNum(document.getElementById('pf-cost').value), sell=toNum(document.getElementById('pf-sell').value), stock=toNum(document.getElementById('pf-stock').value);
+  const cost=round2(toNum(document.getElementById('pf-cost').value)), sell=round2(toNum(document.getElementById('pf-sell').value)), stock=round2(toNum(document.getElementById('pf-stock').value));
   if(!name||isNaN(cost)||isNaN(sell)||isNaN(stock)){ showToast(t('requiredFields')); return; }
   const row = { name, sku:document.getElementById('pf-sku').value.trim(), category:document.getElementById('pf-cat').value.trim(),
     supplier_id: document.getElementById('pf-sup').value||null, cost_price:cost, sell_price:sell,
-    unit:document.getElementById('pf-unit').value.trim()||'pcs', stock, reorder_level:toNum(document.getElementById('pf-reorder').value)||0 };
+    unit:document.getElementById('pf-unit').value.trim()||'pcs', stock, reorder_level:round2(toNum(document.getElementById('pf-reorder').value))||0 };
   const {error} = id ? await sb.from('parts').update(row).eq('id', id) : await sb.from('parts').insert(row);
   if(error){ showToast(error.message); return; }
   Modal.close(); showToast(t('saved')); await Data.refreshAll(); Router.render();
@@ -685,7 +687,7 @@ Pages.deletePurchase = (id)=>{
     if(!purchase){ return; }
     for(const it of (purchase.purchase_items||[])){
       const part = Data.parts.find(p=>p.id===it.part_id);
-      if(part){ await sb.from('parts').update({stock: Number(part.stock)-Number(it.qty)}).eq('id', it.part_id); }
+      if(part){ await sb.from('parts').update({stock: round2(Number(part.stock)-Number(it.qty))}).eq('id', it.part_id); }
     }
     const {error} = await sb.from('purchases').delete().eq('id', id);
     if(error){ showToast(error.message); return; }
@@ -704,7 +706,7 @@ Pages.renderPurchaseCart = ()=>{
           onblur="setTimeout(()=>{const b=document.getElementById('pu-suggest-${i}'); if(b) b.style.display='none';},150)">
         <div id="pu-suggest-${i}" style="display:none;position:absolute;z-index:20;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;margin-top:2px;max-height:220px;overflow-y:auto;width:100%;box-shadow:var(--shadow);"></div>
       </div>
-      <input type="text" inputmode="decimal" value="${row.qty}" style="width:60px;" title="${t('qty')}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
+      <input type="text" inputmode="decimal" value="${qtyFmt(row.qty)}" style="width:60px;" title="${t('qty')}" onchange="Pages.updatePurchaseRow(${i},'qty',this.value)">
       <input type="text" inputmode="decimal" placeholder="${t('costPrice')}" value="${row.cost}" style="width:70px;" onchange="Pages.updatePurchaseRow(${i},'cost',this.value)">
       <button class="close-x" onclick="Pages.removePurchaseRow(${i})">✕</button></div>`;
   }).join('');
@@ -739,7 +741,7 @@ Pages.savePurchase = async()=>{
   await sb.from('purchase_items').insert(itemRows);
   for(const it of items){
     const p = Data.parts.find(x=>x.id===it.partId);
-    if(p) await sb.from('parts').update({ stock: Number(p.stock)+Number(it.qty), cost_price: it.cost>0? it.cost : p.cost_price }).eq('id', it.partId);
+    if(p) await sb.from('parts').update({ stock: round2(Number(p.stock)+Number(it.qty)), cost_price: it.cost>0? it.cost : p.cost_price }).eq('id', it.partId);
   }
   Pages._purchaseCart = [];
   showToast(t('purchaseDone')); await Data.refreshAll(); Router.render();
@@ -824,7 +826,7 @@ Pages.deleteSale = (id)=>{
       const restoreQty = Number(it.qty) - alreadyReturned;
       if(restoreQty>0){
         const part = Data.parts.find(p=>p.id===it.part_id);
-        if(part){ await sb.from('parts').update({stock: Number(part.stock)+restoreQty}).eq('id', it.part_id); }
+        if(part){ await sb.from('parts').update({stock: round2(Number(part.stock)+restoreQty)}).eq('id', it.part_id); }
       }
     }
     const {error} = await sb.from('sales').delete().eq('id', id);
@@ -837,7 +839,7 @@ Pages.renderPosParts = ()=>{
   const t=I18N.t.bind(I18N); const q=(document.getElementById('pos-search')?.value||'').toLowerCase();
   const parts = Data.parts.filter(p=>Number(p.stock)>0 && (!q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)));
   if(!parts.length) return `<div class="empty-state">${t('noData')}</div>`;
-  return parts.map(p=>`<div class="part-pick" onclick="Pages.addToCart('${p.id}')"><div><div class="pn">${p.name}</div><div class="pm">${p.sku||''} · ${t('stock')}: ${p.stock} ${p.unit||''}</div></div><div class="tabular" style="font-weight:700;">${money(p.sell_price)}</div></div>`).join('');
+  return parts.map(p=>`<div class="part-pick" onclick="Pages.addToCart('${p.id}')"><div><div class="pn">${p.name}</div><div class="pm">${p.sku||''} · ${t('stock')}: ${qtyFmt(p.stock)} ${p.unit||''}</div></div><div class="tabular" style="font-weight:700;">${money(p.sell_price)}</div></div>`).join('');
 };
 Pages.addToCart = (partId)=>{
   const t=I18N.t.bind(I18N);
@@ -845,10 +847,10 @@ Pages.addToCart = (partId)=>{
   const existing = Pages._cart.find(c=>c.partId===partId);
   if(existing){
     if(existing.qty < Number(p.stock)){ existing.qty++; }
-    else{ showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${p.stock}`); }
+    else{ showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${qtyFmt(p.stock)}`); }
   }
   else{
-    if(Number(p.stock)<=0){ showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${p.stock}`); return; }
+    if(Number(p.stock)<=0){ showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${qtyFmt(p.stock)}`); return; }
     Pages._cart.push({partId, qty:1, price:Number(p.sell_price), name:p.name, cost:Number(p.cost_price)});
   }
   document.getElementById('pos-cart').innerHTML = Pages.renderCart();
@@ -857,7 +859,7 @@ Pages.renderCart = ()=>{
   const t=I18N.t.bind(I18N); let subtotal=0;
   let rows = Pages._cart.map((c,i)=>{ subtotal += c.qty*c.price;
     return `<div class="cart-line"><div class="cn">${c.name}</div>
-    <input type="text" inputmode="decimal" value="${c.qty}" title="${t('qty')}" onchange="Pages.updateCartQty(${i}, this.value)">
+    <input type="text" inputmode="decimal" value="${qtyFmt(c.qty)}" title="${t('qty')}" onchange="Pages.updateCartQty(${i}, this.value)">
     <input type="text" inputmode="decimal" value="${c.price}" title="${t('sellPrice')}" style="width:72px;" onchange="Pages.updateCartPrice(${i}, this.value)">
     <div class="tabular" style="width:70px;text-align:right;">${money(c.qty*c.price)}</div><button class="close-x" onclick="Pages.removeCartItem(${i})">✕</button></div>`; }).join('');
   if(!Pages._cart.length) rows = `<div class="muted" style="padding:10px 0;">${t('cartEmptyMsg')}</div>`;
@@ -871,7 +873,7 @@ Pages.updateCartQty = (i,val)=>{
   const c=Pages._cart[i]; const p=Data.parts.find(x=>x.id===c.partId);
   let q=toNum(val); if(isNaN(q)||q<=0) q=1;
   if(p && q>Number(p.stock)){
-    showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${p.stock}`);
+    showToast(`${t('qtyUnavailable')} — ${t('stock')}: ${qtyFmt(p.stock)}`);
     document.getElementById('pos-cart').innerHTML=Pages.renderCart();
     return;
   }
@@ -891,7 +893,7 @@ Pages.checkout = async()=>{
     const p = Data.parts.find(x=>x.id===c.partId);
     if(!p || Number(p.stock) < c.qty){ showToast(`${t('insufficientStock')} — ${c.name}: ${t('stock')} ${p?p.stock:0}`); return; }
   }
-  const itemsSummary = Pages._cart.map(c=>`${c.name} × ${c.qty}`).join('<br>');
+  const itemsSummary = Pages._cart.map(c=>`${c.name} × ${qtyFmt(c.qty)}`).join('<br>');
   Confirm.ask(`${t('confirmSaleMsg')}<br><br><b>${itemsSummary}</b><br><br>${t('grandTotal')}: <b>${money(grand)} ${t('currency')}</b>`, ()=>{
     Pages._finalizeCheckout(discount, subtotal, grand, paid);
   });
@@ -912,7 +914,7 @@ Pages._finalizeCheckout = async(discount, subtotal, grand, paid)=>{
   if(error){ showToast(error.message); return; }
   const itemRows = Pages._cart.map(c=>({sale_id:sale.id, part_id:c.partId, name:c.name, qty:c.qty, price:c.price, cost:c.cost}));
   await sb.from('sale_items').insert(itemRows);
-  for(const c of Pages._cart){ const p = Data.parts.find(x=>x.id===c.partId); await sb.from('parts').update({stock: Number(p.stock)-c.qty}).eq('id', c.partId); }
+  for(const c of Pages._cart){ const p = Data.parts.find(x=>x.id===c.partId); await sb.from('parts').update({stock: round2(Number(p.stock)-c.qty)}).eq('id', c.partId); }
   Pages.printReceipt({...sale, items:Pages._cart});
   Pages._cart = [];
   document.getElementById('pos-paid').value=''; document.getElementById('pos-discount').value='0';
@@ -949,7 +951,7 @@ Pages.buildReceiptHtml = ({receiptNo, dateStr, customerName, items, subtotal, di
     <table class="rc-table">
       <thead><tr><th>${t('partName')}</th><th class="num">${t('qty')}</th><th class="num">${t('price')}</th><th class="num">${t('subtotal')}</th></tr></thead>
       <tbody>
-        ${items.map(it=>`<tr><td>${it.name}</td><td class="num">${it.qty}</td><td class="num">${money(it.price)}</td><td class="num">${money(it.qty*it.price)}</td></tr>`).join('')}
+        ${items.map(it=>`<tr><td>${it.name}</td><td class="num">${qtyFmt(it.qty)}</td><td class="num">${money(it.price)}</td><td class="num">${money(it.qty*it.price)}</td></tr>`).join('')}
       </tbody>
     </table>
     <div class="rc-totals">
@@ -1057,7 +1059,7 @@ Pages.renderStocktakeTable = (parts)=>{
   if(!parts.length) return `<div class="empty-state">${t('noData')}</div>`;
   return `<table><thead><tr><th>${t('sku')}</th><th>${t('partName')}</th><th>${t('systemQty')}</th><th>${t('countedQty')}</th><th>${t('difference')}</th></tr></thead><tbody>
   ${parts.map(p=>`<tr>
-    <td>${p.sku||'—'}</td><td>${p.name}</td><td class="tabular">${p.stock} ${p.unit||''}</td>
+    <td>${p.sku||'—'}</td><td>${p.name}</td><td class="tabular">${qtyFmt(p.stock)} ${p.unit||''}</td>
     <td><input type="text" inputmode="decimal" placeholder="—" style="width:80px;" id="st-count-${p.id}" oninput="Pages.updateStocktakeDiff('${p.id}')"></td>
     <td id="st-diff-${p.id}" class="tabular">—</td>
   </tr>`).join('')}
@@ -1072,10 +1074,10 @@ Pages.updateStocktakeDiff = (partId)=>{
   if(val===''){ cell.innerHTML = '—'; return; }
   const counted = toNum(val);
   if(isNaN(counted)){ cell.innerHTML = '—'; return; }
-  const diff = counted - Number(p.stock);
+  const diff = round2(counted - Number(p.stock));
   if(diff===0){ cell.innerHTML = `<span style="color:var(--success);font-weight:700;">${t('statusMatch')}</span>`; }
-  else if(diff<0){ cell.innerHTML = `<span style="color:var(--danger);font-weight:700;">${diff} (${t('statusShort')})</span>`; }
-  else{ cell.innerHTML = `<span style="color:#B8860B;font-weight:700;">+${diff} (${t('statusOver')})</span>`; }
+  else if(diff<0){ cell.innerHTML = `<span style="color:var(--danger);font-weight:700;">${qtyFmt(diff)} (${t('statusShort')})</span>`; }
+  else{ cell.innerHTML = `<span style="color:#B8860B;font-weight:700;">+${qtyFmt(diff)} (${t('statusOver')})</span>`; }
 };
 Pages.generateStocktakeReport = ()=>{
   const t=I18N.t.bind(I18N);
@@ -1087,7 +1089,7 @@ Pages.generateStocktakeReport = ()=>{
     if(val==='') return;
     const counted = toNum(val);
     if(isNaN(counted)) return;
-    const diff = counted - Number(p.stock);
+    const diff = round2(counted - Number(p.stock));
     const status = diff===0 ? 'match' : diff<0 ? 'short' : 'over';
     rows.push({sku:p.sku||'—', name:p.name, systemQty:p.stock, countedQty:counted, diff, status});
   });
@@ -1124,7 +1126,7 @@ Pages.generateStocktakeReport = ()=>{
     <table class="rc-table rp-table">
       <thead><tr><th>${t('sku')}</th><th>${t('partName')}</th><th class="num">${t('systemQty')}</th><th class="num">${t('countedQty')}</th><th class="num">${t('difference')}</th><th>${t('status')}</th></tr></thead>
       <tbody>
-        ${rows.map(r=>`<tr><td>${r.sku}</td><td>${r.name}</td><td class="num">${r.systemQty}</td><td class="num">${r.countedQty}</td><td class="num">${r.diff>0?'+':''}${r.diff}</td><td class="${statusClass(r.status)}">${statusLabel(r.status)}</td></tr>`).join('')}
+        ${rows.map(r=>`<tr><td>${r.sku}</td><td>${r.name}</td><td class="num">${qtyFmt(r.systemQty)}</td><td class="num">${qtyFmt(r.countedQty)}</td><td class="num">${r.diff>0?'+':''}${qtyFmt(r.diff)}</td><td class="${statusClass(r.status)}">${statusLabel(r.status)}</td></tr>`).join('')}
       </tbody>
     </table>
     <div class="rc-footer"><span>Brother Cond For Air Conditioning</span><span>${t('stockCountReport')}</span></div>
@@ -1148,7 +1150,7 @@ Pages.returns = ()=>{
     <div class="card">
       <h3>${t('returnHistory')}</h3>
       ${recentReturns.length? `<table><thead><tr><th>${t('receiptNo')}</th><th>${t('date')}</th><th>${t('partName')}</th><th>${t('qty')}</th><th>${t('refundAmount')}</th></tr></thead><tbody>
-        ${recentReturns.map(r=>{ const sale = Data.sales.find(s=>s.id===r.sale_id); return `<tr><td>${sale?`#${sale.receipt_no}`:'—'}</td><td>${r.created_at.slice(0,16).replace('T',' ')}</td><td>${r.part_name||'—'}</td><td>${r.qty}</td><td class="tabular">${money(r.refund_amount)}</td></tr>`; }).join('')}
+        ${recentReturns.map(r=>{ const sale = Data.sales.find(s=>s.id===r.sale_id); return `<tr><td>${sale?`#${sale.receipt_no}`:'—'}</td><td>${r.created_at.slice(0,16).replace('T',' ')}</td><td>${r.part_name||'—'}</td><td>${qtyFmt(r.qty)}</td><td class="tabular">${money(r.refund_amount)}</td></tr>`; }).join('')}
       </tbody></table>`: `<div class="empty-state">${t('noData')}</div>`}
     </div>
   </div>`;
@@ -1174,7 +1176,7 @@ Pages.findSaleForReturn = ()=>{
       const already = alreadyReturnedByItem[it.id]||0;
       const remaining = Number(it.qty) - already;
       return `<tr>
-        <td>${it.name}</td><td>${it.qty}</td><td class="tabular">${money(it.price)}</td>
+        <td>${it.name}</td><td>${qtyFmt(it.qty)}</td><td class="tabular">${money(it.price)}</td>
         <td><input type="text" inputmode="decimal" value="0" style="width:70px;" id="ret-qty-${it.id}"></td>
         <td>${remaining<=0? `<span class="muted">${t('alreadyReturned')}</span>` : `<button class="btn btn-outline btn-sm" onclick="Pages.doReturn('${it.id}', ${remaining})">${t('processReturn')}</button>`}</td>
       </tr>`;
@@ -1201,7 +1203,7 @@ Pages.doFullReturn = ()=>{
       });
       if(retErr){ showToast(retErr.message); return; }
       const part = Data.parts.find(p=>p.id===item.part_id);
-      if(part){ await sb.from('parts').update({stock: Number(part.stock)+remaining}).eq('id', item.part_id); }
+      if(part){ await sb.from('parts').update({stock: round2(Number(part.stock)+remaining)}).eq('id', item.part_id); }
     }
     showToast(t('returnDone'));
     await Data.refreshAll();
@@ -1222,7 +1224,7 @@ Pages.doReturn = async(saleItemId, remaining)=>{
   });
   if(retErr){ showToast(retErr.message); return; }
   const part = Data.parts.find(p=>p.id===item.part_id);
-  if(part){ await sb.from('parts').update({stock: Number(part.stock)+qty}).eq('id', part.id); }
+  if(part){ await sb.from('parts').update({stock: round2(Number(part.stock)+qty)}).eq('id', part.id); }
   showToast(t('returnDone'));
   await Data.refreshAll();
   Router.render();
